@@ -1,22 +1,9 @@
 from fastapi import FastAPI, UploadFile, File
-import tempfile
-import os
-
-from app.model import PronunciationModel
-from app.inference import score_pronunciation, generate_feedback
-
-# Optional MLOps logging (keep if I've already wired it)
-try:
-    from mlops.monitoring.logger import log_inference
-    LOGGING_ENABLED = True
-except Exception:
-    LOGGING_ENABLED = False
-
+import requests
 
 app = FastAPI()
 
-# Load model once
-model = PronunciationModel()
+MODEL_SERVICE_URL = "http://model_service:8000/analyze"
 
 
 @app.get("/")
@@ -27,43 +14,16 @@ def health():
 @app.post("/analyze")
 async def analyze(audio: UploadFile = File(...)):
     """
-    Main inference endpoint:
-    - accepts audio
-    - transcribes
-    - scores pronunciation
-    - generates feedback
+    API layer:
+    - receives request
+    - forwards to model_service
+    - returns response
     """
 
-    # Save temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-        content = await audio.read()
-        tmp.write(content)
-        tmp_path = tmp.name
+    files = {
+        "audio": (audio.filename, await audio.read(), audio.content_type)
+    }
 
-    try:
-        # Step 1 — transcription
-        transcript = model.transcribe(tmp_path)
+    response = requests.post(MODEL_SERVICE_URL, files=files)
 
-        # Step 2 — scoring
-        result = score_pronunciation(transcript)
-
-        # Step 3 — feedback
-        feedback = generate_feedback(
-            transcript,
-            result["pronunciation_score"]
-        )
-
-        result["feedback"] = feedback
-
-        # Step 4 — MLOps logging
-        if LOGGING_ENABLED:
-            log_inference(
-                input_meta={"bytes": len(content)},
-                output=result
-            )
-
-        return result
-
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+    return response.json()
