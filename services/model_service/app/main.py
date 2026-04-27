@@ -14,10 +14,7 @@ def health():
 @app.post("/analyze")
 async def analyze(audio: UploadFile = File(...)):
     """
-    API layer:
-    - receives request
-    - forwards to model_service
-    - returns response
+    Forward request to model_service
     """
 
     files = {
