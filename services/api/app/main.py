@@ -1,10 +1,22 @@
-from fastapi import FastAPI
-from app.routes import router
+from fastapi import FastAPI, UploadFile, File
+import requests
 
 app = FastAPI()
 
-app.include_router(router)
+MODEL_SERVICE_URL = "http://model_service:8000/analyze"
+
 
 @app.get("/")
 def health():
-    return {"status": "api running"}
+    return {"status": "ok"}
+
+
+@app.post("/analyze")
+async def analyze(audio: UploadFile = File(...)):
+    files = {
+        "audio": (audio.filename, await audio.read(), audio.content_type)
+    }
+
+    response = requests.post(MODEL_SERVICE_URL, files=files)
+
+    return response.json()
