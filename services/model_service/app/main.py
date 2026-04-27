@@ -13,10 +13,6 @@ def health():
 
 @app.post("/analyze")
 async def analyze(audio: UploadFile = File(...)):
-    """
-    Forward request to model_service
-    """
-
     files = {
         "audio": (audio.filename, await audio.read(), audio.content_type)
     }
