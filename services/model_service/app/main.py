@@ -1,108 +1,69 @@
-# =========================================================
-# 🔧 finally! a PATH FIX (I think this ensures Docker can resolve /app as module root)
-# =========================================================
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-# =========================================================
-# 🚀 CORE IMPORTS
-# =========================================================
 from fastapi import FastAPI, UploadFile, File
 import tempfile
+import os
 
-# =========================================================
-# 🧠 ML COMPONENTS
-# =========================================================
-from .model import PronunciationModel
-from .inference import score_pronunciation
+from app.model import PronunciationModel
+from app.inference import score_pronunciation, generate_feedback
 
-# =========================================================
-# 📊 MLOps COMPONENTS
-# =========================================================
-from mlops.monitoring.logger import log_inference
-from mlops.monitoring.metrics import compute_metrics
-from mlops.drift.drift_detector import detect_drift
-from mlops.alerting.email_alert import send_alert
+# Optional MLOps logging (keep if I've already wired it)
+try:
+    from mlops.monitoring.logger import log_inference
+    LOGGING_ENABLED = True
+except Exception:
+    LOGGING_ENABLED = False
 
-# =========================================================
-# ⚙️ APP INITIALIZATION
-# =========================================================
+
 app = FastAPI()
 
-# Load model once at startup (important for performance)
+# Load model once
 model = PronunciationModel()
 
-# =========================================================
-# ❤️ HEALTH CHECK
-# =========================================================
+
 @app.get("/")
 def health():
-    """
-    Basic service health check
-    """
     return {"status": "ok"}
 
-# =========================================================
-# 🎯 INFERENCE ENDPOINT
-# =========================================================
-@app.post("/predict")
-async def predict(audio: UploadFile = File(...)):
+
+@app.post("/analyze")
+async def analyze(audio: UploadFile = File(...)):
     """
     Main inference endpoint:
-    - receives audio file
-    - runs transcription + scoring
-    - logs result for monitoring
+    - accepts audio
+    - transcribes
+    - scores pronunciation
+    - generates feedback
     """
 
-    # Save uploaded audio temporarily
+    # Save temp file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         content = await audio.read()
         tmp.write(content)
         tmp_path = tmp.name
 
     try:
-        # 🧠 Run model inference
+        # Step 1 — transcription
         transcript = model.transcribe(tmp_path)
+
+        # Step 2 — scoring
         result = score_pronunciation(transcript)
 
-        # 📊 Log inference (core MLOps hook)
-        log_inference(
-            input_meta={"duration": len(content)},
-            output=result
+        # Step 3 — feedback
+        feedback = generate_feedback(
+            transcript,
+            result["pronunciation_score"]
         )
+
+        result["feedback"] = feedback
+
+        # Step 4 — MLOps logging
+        if LOGGING_ENABLED:
+            log_inference(
+                input_meta={"bytes": len(content)},
+                output=result
+            )
 
         return result
 
     finally:
-        # 🧹 Cleanup temp file
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
-
-# =========================================================
-# 📈 METRICS ENDPOINT
-# =========================================================
-@app.get("/metrics")
-def metrics():
-    """
-    Returns aggregated performance metrics
-    (e.g., average pronunciation score)
-    """
-    return compute_metrics()
-
-# =========================================================
-# ⚠️ DRIFT DETECTION ENDPOINT
-# =========================================================
-@app.get("/drift")
-def drift():
-    """
-    Detects model performance drift compared to baseline
-    and triggers alert if threshold exceeded
-    """
-    result = detect_drift()
-
-    # 🚨 Trigger alert if drift detected
-    if result["drift_detected"]:
-        send_alert()
-
-    return result
