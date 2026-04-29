@@ -2,14 +2,13 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Copy app code
-COPY app/ ./app
+# Copy app
+COPY services/model_service/app ./app
 
-# 🔥 COPY MLOPS CODE INTO CONTAINER
-COPY ../../mlops ./mlops
+# This better work!
+COPY mlops ./mlops
 
-# Copy requirements
-COPY requirements.txt .
+COPY services/model_service/requirements.txt ./requirements.txt
 
 RUN pip install --no-cache-dir -r requirements.txt
 
