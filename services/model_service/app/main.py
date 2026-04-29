@@ -2,14 +2,16 @@ from fastapi import FastAPI, UploadFile, File
 import tempfile
 import os
 import joblib
+import subprocess
 
 from mlops.features.feature_engineering import extract_features
 from mlops.features.feature_store import save_features
+from mlops.monitoring.drift import detect_drift
 
 app = FastAPI()
 
 # -----------------------------
-# LOAD TRAINED MODEL
+# LOAD MODEL
 # -----------------------------
 MODEL_PATH = "mlops/models/model.pkl"
 
@@ -27,13 +29,17 @@ def health():
 @app.post("/analyze")
 async def analyze(audio: UploadFile = File(...)):
 
-    # Save audio temporarily
+    global model
+
+    # -----------------------------
+    # SAVE AUDIO
+    # -----------------------------
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(await audio.read())
         temp_path = temp_audio.name
 
     # -----------------------------
-    # MOCK TRANSCRIPT (replace later with ASR)
+    # MOCK TRANSCRIPT
     # -----------------------------
     transcript = "I want to practice Spanish, my native language is English."
 
@@ -48,7 +54,23 @@ async def analyze(audio: UploadFile = File(...)):
     features = extract_features(transcript, audio_duration)
 
     # -----------------------------
-    # REAL MODEL PREDICTION
+    # DRIFT DETECTION + RETRAIN
+    # -----------------------------
+    try:
+        if detect_drift():
+            print("⚠️ Drift detected → retraining model...")
+
+            subprocess.run(["python", "-m", "mlops.train.train_model"])
+
+            # Reload updated model
+            if os.path.exists(MODEL_PATH):
+                model = joblib.load(MODEL_PATH)
+
+    except Exception as e:
+        print("Drift check failed:", e)
+
+    # -----------------------------
+    # MODEL PREDICTION
     # -----------------------------
     if model:
         X = [[
@@ -58,7 +80,7 @@ async def analyze(audio: UploadFile = File(...)):
         ]]
         pronunciation_score = float(model.predict(X)[0])
     else:
-        pronunciation_score = 0.5  # fallback
+        pronunciation_score = 0.5
 
     # -----------------------------
     # SAVE FEATURES
@@ -79,8 +101,11 @@ async def analyze(audio: UploadFile = File(...)):
     # -----------------------------
     # FEEDBACK
     # -----------------------------
-    feedback = "AI-evaluated pronunciation is based on your speech features."
+    feedback = "AI-evaluated pronunciation based on your speech feature - this time! Keep going!"
 
+    # -----------------------------
+    # CLEANUP
+    # -----------------------------
     os.remove(temp_path)
 
     return {

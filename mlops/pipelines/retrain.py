@@ -4,7 +4,11 @@ import subprocess
 
 def retrain_if_needed():
     if detect_drift():
-        print("Drift detected. Retraining...")
+        print("Whoa! Drift detected → Retraining model...")
         subprocess.run(["python", "mlops/train/train_model.py"])
     else:
-        print("No drift detected here, pal!")
+        print("Pow! No drift detected here, baby!")
+
+
+if __name__ == "__main__":
+    retrain_if_needed()
