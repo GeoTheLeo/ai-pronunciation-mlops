@@ -2,7 +2,9 @@ version: "3.8"
 
 services:
   model_service:
-    build: ../services/model_service
+    build:
+      context: ..
+      dockerfile: services/model_service/Dockerfile
     container_name: model_service
     ports:
       - "8000:8000"
