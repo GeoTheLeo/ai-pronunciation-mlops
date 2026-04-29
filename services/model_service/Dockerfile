@@ -2,8 +2,9 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY app/ ./app
-COPY requirements.txt .
+# Finally!! FIXED PATHS (project root)
+COPY services/model_service/app ./app
+COPY services/model_service/requirements.txt ./requirements.txt
 
 RUN pip install --no-cache-dir -r requirements.txt
 
