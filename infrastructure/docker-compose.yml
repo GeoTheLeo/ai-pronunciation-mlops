@@ -7,7 +7,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - model_logs:/app/logs
+      - ../mlops:/app/mlops
 
   api_service:
     build: ../services/api
@@ -18,4 +18,3 @@ services:
       - model_service
 
 volumes:
-  model_logs:
