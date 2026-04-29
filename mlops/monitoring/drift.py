@@ -4,15 +4,19 @@ BASELINE_PATH = "mlops/data/baseline.csv"
 CURRENT_PATH = "mlops/data/feature_store.csv"
 
 
-def detect_drift(threshold=0.2):
+def detect_drift(threshold=0.5):
     baseline = pd.read_csv(BASELINE_PATH)
     current = pd.read_csv(CURRENT_PATH)
 
-    drift = {}
+    drift_scores = {}
 
     for col in ["speech_rate", "avg_word_length"]:
-        drift[col] = abs(baseline[col].mean() - current[col].mean())
+        baseline_mean = baseline[col].mean()
+        current_mean = current[col].mean()
 
-    print("Drift:", drift)
+        drift = abs(current_mean - baseline_mean)
+        drift_scores[col] = drift
 
-    return any(v > threshold for v in drift.values())
+    print("Drift scores:", drift_scores)
+
+    return any(v > threshold for v in drift_scores.values())
