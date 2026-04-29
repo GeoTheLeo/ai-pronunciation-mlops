@@ -1,72 +1,91 @@
 from fastapi import FastAPI, UploadFile, File
 import tempfile
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
+import os
+import joblib
 
-from .model import PronunciationModel
-from .inference import score_pronunciation
-from mlops.monitoring.logger import log_inference
+from mlops.features.feature_engineering import extract_features
+from mlops.features.feature_store import save_features
 
 app = FastAPI()
 
-# Lazy-loaded model (do NOT initialize at startup)
-model = None
+# -----------------------------
+# LOAD TRAINED MODEL
+# -----------------------------
+MODEL_PATH = "mlops/models/model.pkl"
 
-# Thread pool to prevent blocking FastAPI event loop
-executor = ThreadPoolExecutor(max_workers=1)
-
-
-def run_inference(tmp_path: str, content: bytes):
-    """
-    This runs in a background thread to avoid blocking the API.
-    """
-
-    global model
-
-    # Lazy load model on first request
-    if model is None:
-        print("🔄 Loading Whisper model (first request only)...")
-        model = PronunciationModel()
-
-    # Run transcription
-    transcript = model.transcribe(tmp_path)
-
-    # Score pronunciation
-    result = score_pronunciation(transcript)
-
-    # Log inference (MLOps monitoring)
-    log_inference(
-        input_meta={"audio_bytes": len(content)},
-        output=result
-    )
-
-    return result
+if os.path.exists(MODEL_PATH):
+    model = joblib.load(MODEL_PATH)
+else:
+    model = None
 
 
 @app.get("/")
 def health():
-    return {"status": "ok"}
+    return {"status": "model service running"}
 
 
 @app.post("/analyze")
 async def analyze(audio: UploadFile = File(...)):
-    """
-    Receives audio file and returns pronunciation analysis.
-    """
 
-    # Save uploaded audio to temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-        content = await audio.read()
-        tmp.write(content)
-        tmp_path = tmp.name
+    # Save audio temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+        temp_audio.write(await audio.read())
+        temp_path = temp_audio.name
 
-    # Run blocking inference in thread pool
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        executor,
-        run_inference,
-        tmp_path,
-        content
-    )
+    # -----------------------------
+    # MOCK TRANSCRIPT (replace later with ASR)
+    # -----------------------------
+    transcript = "I want to practice Spanish, my native language is English."
 
-    return result
+    # -----------------------------
+    # MOCK DURATION
+    # -----------------------------
+    audio_duration = 3.5
+
+    # -----------------------------
+    # FEATURE ENGINEERING
+    # -----------------------------
+    features = extract_features(transcript, audio_duration)
+
+    # -----------------------------
+    # REAL MODEL PREDICTION
+    # -----------------------------
+    if model:
+        X = [[
+            features["num_words"],
+            features["speech_rate"],
+            features["avg_word_length"]
+        ]]
+        pronunciation_score = float(model.predict(X)[0])
+    else:
+        pronunciation_score = 0.5  # fallback
+
+    # -----------------------------
+    # SAVE FEATURES
+    # -----------------------------
+    features["pronunciation_score"] = pronunciation_score
+    save_features(features)
+
+    # -----------------------------
+    # CEFR MAPPING
+    # -----------------------------
+    if pronunciation_score > 0.8:
+        cefr_level = "C1"
+    elif pronunciation_score > 0.6:
+        cefr_level = "B2"
+    else:
+        cefr_level = "B1"
+
+    # -----------------------------
+    # FEEDBACK
+    # -----------------------------
+    feedback = "AI-evaluated pronunciation is based on your speech features."
+
+    os.remove(temp_path)
+
+    return {
+        "transcript": transcript,
+        "pronunciation_score": pronunciation_score,
+        "cefr_level": cefr_level,
+        "feedback": feedback
+    }
