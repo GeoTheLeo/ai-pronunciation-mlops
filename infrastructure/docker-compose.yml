@@ -6,10 +6,6 @@ services:
     container_name: model_service
     ports:
       - "8000:8000"
-    volumes:
-      - ../mlops:/app/mlops
-    environment:
-      - PYTHONPATH=/app
 
   api_service:
     build: ../services/api
