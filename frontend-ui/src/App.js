@@ -1,15 +1,83 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import WaveSurfer from "wavesurfer.js";
 
 function App() {
-  const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [recording, setRecording] = useState(false);
 
-  const handleUpload = async () => {
-    if (!file) return;
+  const mediaRecorderRef = useRef(null);
+  const audioChunks = useRef([]);
+  const waveformRef = useRef(null);
+  const waveSurferRef = useRef(null);
 
+  // -----------------------------
+  // INIT WAVESURFER
+  // -----------------------------
+  useEffect(() => {
+    if (waveformRef.current) {
+      waveSurferRef.current = WaveSurfer.create({
+        container: waveformRef.current,
+        waveColor: "#3b82f6",
+        progressColor: "#1d4ed8",
+        height: 80,
+      });
+    }
+
+    return () => {
+      if (waveSurferRef.current) {
+        waveSurferRef.current.destroy();
+      }
+    };
+  }, []);
+
+  // -----------------------------
+  // START RECORDING
+  // -----------------------------
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunks.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunks.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = handleStop;
+
+      mediaRecorder.start();
+      setRecording(true);
+    } catch (err) {
+      alert("Microphone access denied");
+    }
+  };
+
+  // -----------------------------
+  // STOP RECORDING
+  // -----------------------------
+  const stopRecording = () => {
+    mediaRecorderRef.current.stop();
+    setRecording(false);
+  };
+
+  // -----------------------------
+  // HANDLE STOP (UPLOAD + WAVEFORM)
+  // -----------------------------
+  const handleStop = async () => {
+    const blob = new Blob(audioChunks.current, { type: "audio/wav" });
+
+    // Show waveform
+    const url = URL.createObjectURL(blob);
+    if (waveSurferRef.current) {
+      waveSurferRef.current.load(url);
+    }
+
+    // Send to backend
     const formData = new FormData();
-    formData.append("audio", file);
+    formData.append("audio", blob, "recording.wav");
 
     setLoading(true);
 
@@ -22,43 +90,60 @@ function App() {
       const data = await res.json();
       setResult(data);
     } catch (err) {
-      console.error(err);
-      alert("Error connecting to backend");
+      alert("Backend error");
     }
 
     setLoading(false);
   };
 
   return (
-    <div style={{ padding: 40, fontFamily: "Arial", maxWidth: 600 }}>
-      <h1>🎤 Pronunciation Coach</h1>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-lg text-center">
 
-      <p>Upload your audio and get instant feedback.</p>
+        <h1 className="text-3xl font-bold mb-4">🎤 Pronunciation Coach</h1>
+        <p className="text-gray-600 mb-6">
+          Speak and get instant AI feedback
+        </p>
 
-      <input
-        type="file"
-        accept="audio/*"
-        onChange={(e) => setFile(e.target.files[0])}
-      />
+        {!recording ? (
+          <button
+            onClick={startRecording}
+            className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700"
+          >
+            Start Recording
+          </button>
+        ) : (
+          <button
+            onClick={stopRecording}
+            className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700"
+          >
+            Stop Recording
+          </button>
+        )}
 
-      <br /><br />
+        {/* Waveform */}
+        <div ref={waveformRef} className="mt-6"></div>
 
-      <button onClick={handleUpload}>
-        Analyze
-      </button>
+        {loading && <p className="mt-4">Processing...</p>}
 
-      {loading && <p>Processing...</p>}
+        {result && (
+          <div className="mt-6 text-left">
+            <h3 className="font-semibold mb-2">Result</h3>
 
-      {result && (
-        <div style={{ marginTop: 20 }}>
-          <h3>Result</h3>
+            <p><b>Transcript:</b> {result.transcript}</p>
 
-          <p><b>Transcript:</b> {result.transcript}</p>
-          <p><b>Score:</b> {result.pronunciation_score}</p>
-          <p><b>CEFR:</b> {result.cefr_level}</p>
-          <p><b>Feedback:</b> {result.feedback}</p>
-        </div>
-      )}
+            <p className={`font-bold ${
+              result.pronunciation_score > 0.8 ? "text-green-600" : "text-red-600"
+            }`}>
+              Score: {result.pronunciation_score}
+            </p>
+
+            <p><b>CEFR:</b> {result.cefr_level}</p>
+            <p><b>Feedback:</b> {result.feedback}</p>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
