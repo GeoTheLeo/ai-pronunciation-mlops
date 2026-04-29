@@ -3,33 +3,70 @@ import tempfile
 import os
 import joblib
 import subprocess
-
-# MLOps imports (mounted via Docker volume)
-from mlops.features.feature_engineering import extract_features
-from mlops.features.feature_store import save_features
-from mlops.monitoring.drift import detect_drift
+import pandas as pd
 
 app = FastAPI()
 
-# -----------------------------
-# MODEL PATH
-# -----------------------------
-MODEL_PATH = "mlops/models/model.pkl"
+MODEL_PATH = "model.pkl"
+DATA_PATH = "feature_store.csv"
+BASELINE_PATH = "baseline.csv"
 
 
 # -----------------------------
-# LOAD MODEL FUNCTION
+# LOAD MODEL
 # -----------------------------
 def load_model():
     if os.path.exists(MODEL_PATH):
-        print("✅ Loading model...")
         return joblib.load(MODEL_PATH)
-    else:
-        print("⚠️ No model found. Using fallback.")
-        return None
+    return None
 
 
 model = load_model()
+
+
+# -----------------------------
+# FEATURE ENGINEERING
+# -----------------------------
+def extract_features(transcript, duration):
+    words = transcript.split()
+    num_words = len(words)
+    speech_rate = num_words / duration if duration > 0 else 0
+    avg_word_length = sum(len(w) for w in words) / num_words if num_words > 0 else 0
+
+    return {
+        "num_words": num_words,
+        "speech_rate": speech_rate,
+        "avg_word_length": avg_word_length
+    }
+
+
+# -----------------------------
+# SAVE FEATURES
+# -----------------------------
+def save_features(features):
+    df = pd.DataFrame([features])
+
+    if os.path.exists(DATA_PATH):
+        df.to_csv(DATA_PATH, mode="a", header=False, index=False)
+    else:
+        df.to_csv(DATA_PATH, index=False)
+
+
+# -----------------------------
+# DRIFT DETECTION
+# -----------------------------
+def detect_drift(threshold=0.5):
+    if not os.path.exists(DATA_PATH) or not os.path.exists(BASELINE_PATH):
+        return False
+
+    baseline = pd.read_csv(BASELINE_PATH)
+    current = pd.read_csv(DATA_PATH)
+
+    for col in ["speech_rate", "avg_word_length"]:
+        if abs(current[col].mean() - baseline[col].mean()) > threshold:
+            return True
+
+    return False
 
 
 # -----------------------------
@@ -41,93 +78,51 @@ def health():
 
 
 # -----------------------------
-# ANALYZE ENDPOINT
+# MAIN ENDPOINT
 # -----------------------------
 @app.post("/analyze")
 async def analyze(audio: UploadFile = File(...)):
     global model
 
-    # -----------------------------
-    # SAVE AUDIO TEMP FILE
-    # -----------------------------
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(await audio.read())
         temp_path = temp_audio.name
 
-    # -----------------------------
-    # MOCK TRANSCRIPT (replace later with ASR)
-    # -----------------------------
     transcript = "I want to practice Spanish, my native language is English."
+    duration = 3.5
 
-    # -----------------------------
-    # MOCK DURATION
-    # -----------------------------
-    audio_duration = 3.5
+    features = extract_features(transcript, duration)
 
-    # -----------------------------
-    # FEATURE ENGINEERING
-    # -----------------------------
-    features = extract_features(transcript, audio_duration)
-
-    # -----------------------------
-    # DRIFT DETECTION + RETRAIN
-    # -----------------------------
+    # Drift detection
     try:
         if detect_drift():
-            print("⚠️ Drift detected → retraining model...")
+            print("Drift detected → retraining...")
+            subprocess.run(["python", "train_model.py"])
 
-            subprocess.run(
-                ["python", "-m", "mlops.train.train_model"],
-                check=True
-            )
-
-            model = load_model()
-
+            if os.path.exists(MODEL_PATH):
+                model = joblib.load(MODEL_PATH)
     except Exception as e:
-        print("❌ Drift/retrain failed:", e)
+        print("Drift error:", e)
 
-    # -----------------------------
-    # MODEL PREDICTION
-    # -----------------------------
+    # Prediction
     if model:
         X = [[
             features["num_words"],
             features["speech_rate"],
             features["avg_word_length"]
         ]]
-        pronunciation_score = float(model.predict(X)[0])
+        score = float(model.predict(X)[0])
     else:
-        pronunciation_score = 0.5  # fallback
+        score = 0.5
 
-    # -----------------------------
-    # SAVE FEATURES (FEEDBACK LOOP)
-    # -----------------------------
-    features["pronunciation_score"] = pronunciation_score
+    features["pronunciation_score"] = score
     save_features(features)
 
-    # -----------------------------
-    # CEFR MAPPING
-    # -----------------------------
-    if pronunciation_score > 0.8:
-        cefr_level = "C1"
-    elif pronunciation_score > 0.6:
-        cefr_level = "B2"
-    else:
-        cefr_level = "B1"
-
-    # -----------------------------
-    # FEEDBACK
-    # -----------------------------
-    feedback = "AI-evaluated pronunciation based on speech features. Keep going!"
-
-    # -----------------------------
-    # CLEANUP
-    # -----------------------------
     os.remove(temp_path)
 
     return {
         "transcript": transcript,
-        "pronunciation_score": pronunciation_score,
-        "cefr_level": cefr_level,
-        "feedback": feedback
+        "pronunciation_score": score,
+        "cefr_level": "B2",
+        "feedback": "AI-evaluated pronunciation"
     }
