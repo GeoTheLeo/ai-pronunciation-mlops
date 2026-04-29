@@ -7,9 +7,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - model_logs:/app/logs   # 👈 THIS is key, baby!
+      - model_logs:/app/logs
 
-  api:
+  api_service:
     build: ../services/api
     container_name: api_service
     ports:
