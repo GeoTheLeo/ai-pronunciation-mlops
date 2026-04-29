@@ -17,4 +17,4 @@ services:
     depends_on:
       - model_service
 
-volumes:
+volumes: {}
