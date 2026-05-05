@@ -1,14 +1,16 @@
-import whisper
+from openai import OpenAI
 import os
 
-# Load once (important for performance)
-model = whisper.load_model("base")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+def transcribe_audio(file_path):
+    """
+    Uses OpenAI Whisper API (no local model, no memory issues)
+    """
+    with open(file_path, "rb") as audio_file:
+        transcript = client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=audio_file
+        )
 
-def transcribe_audio(file_path: str) -> str:
-    if not os.path.exists(file_path):
-        raise FileNotFoundError("Audio file not found")
-
-    result = model.transcribe(file_path)
-
-    return result["text"].strip()
+    return transcript.text
