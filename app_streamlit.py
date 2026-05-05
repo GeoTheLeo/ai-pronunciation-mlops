@@ -1,1 +1,124 @@
+import streamlit as st
+import tempfile
+import os
+import pandas as pd
+import random
+import sys
 
+# -----------------------------
+# FIX IMPORT PATH (CRITICAL)
+# -----------------------------
+sys.path.append(os.path.join(os.path.dirname(__file__), "services", "model_service"))
+
+from app.llm_feedback import generate_feedback
+from app.transcription import transcribe_audio
+
+DATA_PATH = "feature_store.csv"
+
+st.set_page_config(page_title="AI Pronunciation Coach", layout="wide")
+
+st.title("AI Pronunciation Coach (MLOps Demo)")
+
+# -----------------------------
+# FEATURE ENGINEERING
+# -----------------------------
+def extract_features(transcript, duration):
+    words = transcript.split()
+    num_words = len(words)
+
+    speech_rate = num_words / duration if duration > 0 else 0
+    avg_word_length = (
+        sum(len(w) for w in words) / num_words if num_words > 0 else 0
+    )
+
+    return {
+        "num_words": num_words,
+        "speech_rate": speech_rate,
+        "avg_word_length": avg_word_length
+    }
+
+# -----------------------------
+# SAVE FEATURES
+# -----------------------------
+def save_features(features):
+    df = pd.DataFrame([features])
+
+    if os.path.exists(DATA_PATH):
+        df.to_csv(DATA_PATH, mode="a", header=False, index=False)
+    else:
+        df.to_csv(DATA_PATH, index=False)
+
+# -----------------------------
+# UI INPUT
+# -----------------------------
+uploaded_file = st.file_uploader("Upload your speech (.wav)", type=["wav"])
+
+if uploaded_file is not None:
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+        temp_audio.write(uploaded_file.read())
+        temp_path = temp_audio.name
+
+    st.info("Processing audio...")
+
+    # -----------------------------
+    # TRANSCRIPTION
+    # -----------------------------
+    transcript = transcribe_audio(temp_path)
+
+    duration = 3.5
+    features = extract_features(transcript, duration)
+
+    # -----------------------------
+    # DEMO SCORING
+    # -----------------------------
+    score = round(random.uniform(0.4, 0.9), 2)
+    confidence = round(random.uniform(0.7, 0.95), 2)
+
+    # -----------------------------
+    # LLM FEEDBACK
+    # -----------------------------
+    feedback, phonemes, practice = generate_feedback(transcript, score)
+
+    features["pronunciation_score"] = score
+    save_features(features)
+
+    os.remove(temp_path)
+
+    # -----------------------------
+    # DISPLAY RESULTS
+    # -----------------------------
+    st.subheader("Transcript")
+    st.write(transcript)
+
+    col1, col2 = st.columns(2)
+    col1.metric("Score", score)
+    col2.metric("Confidence", confidence)
+
+    st.subheader("Feedback")
+    st.write(feedback)
+
+    st.subheader("Phoneme Feedback")
+    for p in phonemes:
+        st.write(f"- {p}")
+
+    st.subheader("Practice Sentences")
+    for s in practice:
+        st.write(f"- {s}")
+
+# -----------------------------
+# ANALYTICS
+# -----------------------------
+st.divider()
+st.subheader("Score Trend")
+
+if os.path.exists(DATA_PATH):
+    df = pd.read_csv(DATA_PATH)
+    if not df.empty:
+        df = df.reset_index(drop=True)
+        df["step"] = df.index + 1
+        st.line_chart(df.set_index("step")["pronunciation_score"])
+    else:
+        st.write("No data yet.")
+else:
+    st.write("No data yet.")
