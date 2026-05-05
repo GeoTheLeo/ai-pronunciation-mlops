@@ -1,151 +1,193 @@
-import React, { useState, useRef, useEffect } from "react";
-import WaveSurfer from "wavesurfer.js";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer
+} from "recharts";
 
 function App() {
+  const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [analytics, setAnalytics] = useState(null);
   const [recording, setRecording] = useState(false);
+  const [practiceText, setPracticeText] = useState(null);
 
   const mediaRecorderRef = useRef(null);
-  const audioChunks = useRef([]);
-  const waveformRef = useRef(null);
-  const waveSurferRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   // -----------------------------
-  // INIT WAVESURFER
+  // FETCH ANALYTICS
   // -----------------------------
+  const fetchAnalytics = async () => {
+    const res = await fetch("http://localhost:8000/analytics");
+    const data = await res.json();
+    setAnalytics(data);
+  };
+
   useEffect(() => {
-    if (waveformRef.current) {
-      waveSurferRef.current = WaveSurfer.create({
-        container: waveformRef.current,
-        waveColor: "#3b82f6",
-        progressColor: "#1d4ed8",
-        height: 80,
-      });
-    }
-
-    return () => {
-      if (waveSurferRef.current) {
-        waveSurferRef.current.destroy();
-      }
-    };
+    fetchAnalytics();
   }, []);
 
   // -----------------------------
-  // START RECORDING
+  // RECORD AUDIO
   // -----------------------------
   const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunks.current = [];
+    const mediaRecorder = new MediaRecorder(stream);
+    mediaRecorderRef.current = mediaRecorder;
+    audioChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunks.current.push(event.data);
-      };
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
 
-      mediaRecorder.onstop = handleStop;
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const audioFile = new File([blob], "recording.webm");
+      setFile(audioFile);
+    };
 
-      mediaRecorder.start();
-      setRecording(true);
-    } catch (err) {
-      alert("Microphone access denied");
-    }
+    mediaRecorder.start();
+    setRecording(true);
+    setResult(null);
   };
 
-  // -----------------------------
-  // STOP RECORDING
-  // -----------------------------
   const stopRecording = () => {
     mediaRecorderRef.current.stop();
     setRecording(false);
   };
 
   // -----------------------------
-  // HANDLE STOP (UPLOAD + WAVEFORM)
+  // ANALYZE
   // -----------------------------
-  const handleStop = async () => {
-    const blob = new Blob(audioChunks.current, { type: "audio/wav" });
+  const analyze = async () => {
+    if (!file) return alert("Record audio first.");
 
-    // Show waveform
-    const url = URL.createObjectURL(blob);
-    if (waveSurferRef.current) {
-      waveSurferRef.current.load(url);
-    }
-
-    // Send to backend
     const formData = new FormData();
-    formData.append("audio", blob, "recording.wav");
+    formData.append("audio", file);
 
-    setLoading(true);
+    const res = await fetch("http://localhost:8000/analyze", {
+      method: "POST",
+      body: formData
+    });
 
-    try {
-      const res = await fetch("http://91.99.24.27:8080/analyze", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-      setResult(data);
-    } catch (err) {
-      alert("Backend error");
-    }
-
-    setLoading(false);
+    const data = await res.json();
+    setResult(data);
+    fetchAnalytics();
   };
 
+  // -----------------------------
+  // IMPROVEMENT METRICS
+  // -----------------------------
+  const lastScore =
+    analytics?.history?.length > 1
+      ? analytics.history[analytics.history.length - 2].pronunciation_score
+      : null;
+
+  const improvement =
+    lastScore !== null && result
+      ? Math.round((result.pronunciation_score - lastScore) * 100)
+      : null;
+
+  const bestScore = analytics?.history
+    ? Math.max(...analytics.history.map(h => h.pronunciation_score))
+    : null;
+
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-lg text-center">
+    <div style={{ padding: 40, maxWidth: 800, margin: "auto" }}>
+      <h1>🎤 AI Pronunciation Coach</h1>
 
-        <h1 className="text-3xl font-bold mb-4">🎤 Pronunciation Coach</h1>
-        <p className="text-gray-600 mb-6">
-          Speak and get instant AI feedback
-        </p>
+      {/* PRACTICE MODE */}
+      {practiceText && (
+        <div style={styles.practiceMode}>
+          <h3>🎯 Practice Mode</h3>
+          <p><b>Say this:</b> {practiceText}</p>
+        </div>
+      )}
 
-        {!recording ? (
-          <button
-            onClick={startRecording}
-            className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700"
-          >
-            Start Recording
-          </button>
-        ) : (
-          <button
-            onClick={stopRecording}
-            className="bg-red-600 text-white px-6 py-3 rounded-xl hover:bg-red-700"
-          >
-            Stop Recording
-          </button>
-        )}
+      {/* RECORD BUTTONS */}
+      {!recording ? (
+        <button onClick={startRecording}>🎙 Start Recording</button>
+      ) : (
+        <button onClick={stopRecording}>⏹ Stop Recording</button>
+      )}
 
-        {/* Waveform */}
-        <div ref={waveformRef} className="mt-6"></div>
+      <br /><br />
 
-        {loading && <p className="mt-4">Processing...</p>}
+      <button onClick={analyze}>Analyze</button>
 
-        {result && (
-          <div className="mt-6 text-left">
-            <h3 className="font-semibold mb-2">Result</h3>
+      {/* RESULTS */}
+      {result && (
+        <div style={styles.card}>
+          <h3>Score: {Math.round(result.pronunciation_score * 100)}%</h3>
+          <p>Confidence: {result.confidence}</p>
 
-            <p><b>Transcript:</b> {result.transcript}</p>
-
-            <p className={`font-bold ${
-              result.pronunciation_score > 0.8 ? "text-green-600" : "text-red-600"
-            }`}>
-              Score: {result.pronunciation_score}
+          {improvement !== null && (
+            <p>
+              Improvement: {improvement > 0 ? "+" : ""}
+              {improvement}%
             </p>
+          )}
 
-            <p><b>CEFR:</b> {result.cefr_level}</p>
-            <p><b>Feedback:</b> {result.feedback}</p>
-          </div>
-        )}
+          {bestScore && (
+            <p>Best Score: {Math.round(bestScore * 100)}%</p>
+          )}
 
-      </div>
+          <p>{result.feedback}</p>
+
+          {/* PHONEMES */}
+          <h4>Phoneme Feedback</h4>
+          {result.phoneme_feedback.map((p, i) => (
+            <p key={i}>• {p}</p>
+          ))}
+
+          {/* PRACTICE SENTENCES */}
+          <h4>Practice (click to use)</h4>
+          {result.practice_sentences.map((s, i) => (
+            <p
+              key={i}
+              style={{ cursor: "pointer" }}
+              onClick={() => setPracticeText(s)}
+            >
+              • {s}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* CHART */}
+      {analytics?.history && (
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={analytics.history}>
+            <XAxis dataKey="step" />
+            <YAxis domain={[0, 1]} />
+            <Tooltip />
+            <Line dataKey="pronunciation_score" stroke="#4CAF50" />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </div>
   );
 }
 
 export default App;
+
+const styles = {
+  card: {
+    marginTop: 20,
+    padding: 15,
+    background: "#f5f5f5",
+    borderRadius: 10
+  },
+  practiceMode: {
+    marginBottom: 20,
+    padding: 15,
+    background: "#263238",
+    color: "white",
+    borderRadius: 10
+  }
+};

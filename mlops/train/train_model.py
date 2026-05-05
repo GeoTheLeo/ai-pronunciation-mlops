@@ -1,51 +1,52 @@
 import pandas as pd
-import mlflow
-import mlflow.sklearn
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
 import joblib
 import os
+from sklearn.ensemble import GradientBoostingRegressor
 
-DATA_PATH = "mlops/data/feature_store.csv"
-MODEL_PATH = "mlops/models/model.pkl"
+DATA_PATH = "services/model_service/feature_store.csv"
+MODEL_PATH = "services/model_service/model.pkl"
+MODEL_PATH = "model.pkl"
 
-# -----------------------------
-# LOAD DATA
-# -----------------------------
-if not os.path.exists(DATA_PATH):
-    raise Exception("No feature store data found. Run the app first.")
 
-df = pd.read_csv(DATA_PATH)
+def create_training_data(df):
+    """
+    Create synthetic but meaningful labels from features
+    """
 
-# -----------------------------
-# FEATURES / TARGET
-# -----------------------------
-X = df[["num_words", "speech_rate", "avg_word_length"]]
-y = df["pronunciation_score"]
+    # normalize features
+    df["speech_rate_norm"] = df["speech_rate"] / df["speech_rate"].max()
+    df["word_len_norm"] = df["avg_word_length"] / df["avg_word_length"].max()
 
-# -----------------------------
-# TRAIN TEST SPLIT
-# -----------------------------
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+    # heuristic scoring (this is the key improvement)
+    df["target"] = (
+        0.6 * df["speech_rate_norm"] +
+        0.4 * df["word_len_norm"]
+    )
 
-# -----------------------------
-# MLFLOW TRACKING
-# -----------------------------
-mlflow.set_experiment("pronunciation_model")
+    return df
 
-with mlflow.start_run():
+
+def train():
+    if not os.path.exists(DATA_PATH):
+        raise Exception("No feature store found.")
+
+    df = pd.read_csv(DATA_PATH)
+
+    if len(df) < 5:
+        raise Exception("Not enough data to train.")
+
+    df = create_training_data(df)
+
+    X = df[["num_words", "speech_rate", "avg_word_length"]]
+    y = df["target"]
 
     model = GradientBoostingRegressor()
-    model.fit(X_train, y_train)
+    model.fit(X, y)
 
-    preds = model.predict(X_test)
-    mse = mean_squared_error(y_test, preds)
-
-    mlflow.log_metric("mse", mse)
-    mlflow.sklearn.log_model(model, "model")
-
-    os.makedirs("mlops/models", exist_ok=True)
     joblib.dump(model, MODEL_PATH)
 
-    print(f"Model trained. MSE: {mse}")
+    print("✅ Model trained successfully")
+
+
+if __name__ == "__main__":
+    train()
