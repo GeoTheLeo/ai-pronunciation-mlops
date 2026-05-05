@@ -1,0 +1,121 @@
+# =========================
+# 🐍 PYTHON
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.env/
+.envrc
+*.env
+
+# =========================
+# 🧠 ML / DATA / MODELS
+# =========================
+# Model files
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.pth
+*.onnx
+
+# Feature/data storage
+feature_store.csv
+*.csv
+*.parquet
+*.feather
+
+# ML experiment tracking
+mlruns/
+mlflow/
+wandb/
+artifacts/
+
+# Model directories
+models/
+
+# =========================
+# 🔊 AUDIO / MEDIA
+# =========================
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+
+# =========================
+# 📊 LOGS
+# =========================
+*.log
+logs/
+
+# =========================
+# 🌐 FRONTEND (REACT)
+# =========================
+node_modules/
+build/
+dist/
+.next/
+out/
+
+# =========================
+# ⚙️ DOCKER
+# =========================
+*.tar
+*.gz
+*.zip
+
+# =========================
+# 💻 OS FILES
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# 🔐 SECRETS / KEYS
+# =========================
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.pfx
+secrets.json
+
+# =========================
+# 🧪 TEST / TEMP FILES
+# =========================
+tmp/
+temp/
+*.tmp
+*.bak
+
+# =========================
+# 🧠 IDE / EDITOR
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# 📦 LARGE BINARIES (CRITICAL)
+# =========================
+*.dll
+*.exe
+*.bin
+
+# =========================
+# 🚀 RENDER / DEPLOYMENT
+# =========================
+.render/
