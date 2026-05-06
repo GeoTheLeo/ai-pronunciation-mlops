@@ -4,6 +4,8 @@ import os
 import pandas as pd
 import random
 import sys
+import joblib
+import subprocess
 
 # -----------------------------
 # FIX IMPORT PATH
@@ -13,7 +15,36 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "services", "model_servi
 from app.llm_feedback import generate_feedback
 from app.transcription import transcribe_audio
 
+# -----------------------------
+# PATHS
+# -----------------------------
 DATA_PATH = "feature_store.csv"
+MODEL_PATH = "model.pkl"
+
+# -----------------------------
+# LOAD MODEL
+# -----------------------------
+def load_model():
+    if os.path.exists(MODEL_PATH):
+        try:
+            return joblib.load(MODEL_PATH)
+        except Exception as e:
+            print("Model load failed:", e)
+            return None
+    return None
+
+model = load_model()
+
+# -----------------------------
+# RETRAIN TRIGGER
+# -----------------------------
+def should_retrain(threshold=20):
+    if not os.path.exists(DATA_PATH):
+        return False
+
+    df = pd.read_csv(DATA_PATH)
+    return len(df) % threshold == 0
+
 
 # -----------------------------
 # PAGE CONFIG
@@ -66,29 +97,51 @@ if uploaded_file is not None:
         temp_path = temp_audio.name
 
     with st.spinner("Processing audio..."):
-
         try:
-            # -----------------------------
-            # TRANSCRIPTION (SAFE)
-            # -----------------------------
             transcript = transcribe_audio(temp_path)
 
             duration = 3.5
             features = extract_features(transcript, duration)
 
             # -----------------------------
-            # DEMO SCORING
+            # MODEL-BASED SCORING
             # -----------------------------
-            score = round(random.uniform(0.4, 0.9), 2)
+            if model is not None:
+                try:
+                    score = model.predict([[
+                        features["num_words"],
+                        features["speech_rate"],
+                        features["avg_word_length"]
+                    ]])[0]
+
+                    score = float(max(0, min(1, score)))
+
+                except Exception as e:
+                    print("Prediction failed:", e)
+                    score = round(random.uniform(0.4, 0.9), 2)
+            else:
+                score = round(random.uniform(0.4, 0.9), 2)
+
             confidence = round(random.uniform(0.7, 0.95), 2)
 
-            # -----------------------------
-            # LLM FEEDBACK
-            # -----------------------------
             feedback, phonemes, practice = generate_feedback(transcript, score)
 
             features["pronunciation_score"] = score
             save_features(features)
+
+            # -----------------------------
+            # RETRAIN TRIGGER
+            # -----------------------------
+            if should_retrain():
+                try:
+                    subprocess.run(
+                        ["python", "mlops/train/train_model.py"],
+                        check=True
+                    )
+                    model = load_model()
+                    print("Model retrained and reloaded")
+                except Exception as e:
+                    print("Retraining failed:", e)
 
         except Exception as e:
             st.error(f"Processing failed: {e}")
@@ -104,7 +157,7 @@ if uploaded_file is not None:
     st.write(transcript)
 
     col1, col2 = st.columns(2)
-    col1.metric("Score", score)
+    col1.metric("Score", round(score, 2))
     col2.metric("Confidence", confidence)
 
     st.subheader("Feedback")

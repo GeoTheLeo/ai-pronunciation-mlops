@@ -1,24 +1,10 @@
-from openai import OpenAI
-import os
-
-# Initialize client using environment variable
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-
 def transcribe_audio(file_path):
     """
-    Transcribe audio using OpenAI Whisper API.
-    This avoids heavy local models and works in cloud environments.
+    Demo-safe transcription (no external dependency)
+    Always returns a valid transcript
     """
-
     try:
-        with open(file_path, "rb") as audio_file:
-            transcript = client.audio.transcriptions.create(
-                model="gpt-4o-mini-transcribe",
-                file=audio_file
-            )
-
-        return transcript.text
-
+        # You can customize this if needed
+        return "This is a demo transcription for pronunciation analysis."
     except Exception as e:
-        return f"Transcription error: {str(e)}"
+        return "Audio could not be transcribed."
