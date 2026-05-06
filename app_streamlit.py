@@ -19,9 +19,6 @@ st.set_page_config(page_title="AI Pronunciation Coach", layout="wide")
 
 st.title("AI Pronunciation Coach (MLOps Demo)")
 
-# -----------------------------
-# FEATURE ENGINEERING
-# -----------------------------
 def extract_features(transcript, duration):
     words = transcript.split()
     num_words = len(words)
@@ -37,9 +34,6 @@ def extract_features(transcript, duration):
         "avg_word_length": avg_word_length
     }
 
-# -----------------------------
-# SAVE FEATURES
-# -----------------------------
 def save_features(features):
     df = pd.DataFrame([features])
 
@@ -48,9 +42,6 @@ def save_features(features):
     else:
         df.to_csv(DATA_PATH, index=False)
 
-# -----------------------------
-# UI INPUT
-# -----------------------------
 uploaded_file = st.file_uploader("Upload your speech (.wav)", type=["wav"])
 
 if uploaded_file is not None:
@@ -61,23 +52,14 @@ if uploaded_file is not None:
 
     st.info("Processing audio...")
 
-    # -----------------------------
-    # TRANSCRIPTION
-    # -----------------------------
     transcript = transcribe_audio(temp_path)
 
     duration = 3.5
     features = extract_features(transcript, duration)
 
-    # -----------------------------
-    # DEMO SCORING
-    # -----------------------------
     score = round(random.uniform(0.4, 0.9), 2)
     confidence = round(random.uniform(0.7, 0.95), 2)
 
-    # -----------------------------
-    # LLM FEEDBACK
-    # -----------------------------
     feedback, phonemes, practice = generate_feedback(transcript, score)
 
     features["pronunciation_score"] = score
@@ -85,9 +67,6 @@ if uploaded_file is not None:
 
     os.remove(temp_path)
 
-    # -----------------------------
-    # DISPLAY RESULTS
-    # -----------------------------
     st.subheader("Transcript")
     st.write(transcript)
 
@@ -106,9 +85,6 @@ if uploaded_file is not None:
     for s in practice:
         st.write(f"- {s}")
 
-# -----------------------------
-# ANALYTICS
-# -----------------------------
 st.divider()
 st.subheader("Score Trend")
 
