@@ -5,9 +5,7 @@ import pandas as pd
 import random
 import sys
 
-# -----------------------------
-# FIX IMPORT PATH (CRITICAL)
-# -----------------------------
+# FIX IMPORT PATH
 sys.path.append(os.path.join(os.path.dirname(__file__), "services", "model_service"))
 
 from app.llm_feedback import generate_feedback
@@ -16,18 +14,15 @@ from app.transcription import transcribe_audio
 DATA_PATH = "feature_store.csv"
 
 st.set_page_config(page_title="AI Pronunciation Coach", layout="wide")
-
 st.title("AI Pronunciation Coach (MLOps Demo)")
 
 def extract_features(transcript, duration):
     words = transcript.split()
     num_words = len(words)
-
     speech_rate = num_words / duration if duration > 0 else 0
     avg_word_length = (
         sum(len(w) for w in words) / num_words if num_words > 0 else 0
     )
-
     return {
         "num_words": num_words,
         "speech_rate": speech_rate,
@@ -36,7 +31,6 @@ def extract_features(transcript, duration):
 
 def save_features(features):
     df = pd.DataFrame([features])
-
     if os.path.exists(DATA_PATH):
         df.to_csv(DATA_PATH, mode="a", header=False, index=False)
     else:
@@ -45,7 +39,6 @@ def save_features(features):
 uploaded_file = st.file_uploader("Upload your speech (.wav)", type=["wav"])
 
 if uploaded_file is not None:
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(uploaded_file.read())
         temp_path = temp_audio.name
@@ -53,7 +46,6 @@ if uploaded_file is not None:
     st.info("Processing audio...")
 
     transcript = transcribe_audio(temp_path)
-
     duration = 3.5
     features = extract_features(transcript, duration)
 
