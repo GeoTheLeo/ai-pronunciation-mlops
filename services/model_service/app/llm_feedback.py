@@ -1,86 +1,73 @@
-from openai import OpenAI
-import os
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
+import random
 
 def generate_feedback(transcript, score):
+
+    text = transcript.lower()
+
     # -----------------------------
-    # ADAPTIVE DIFFICULTY
+    # BASIC FEEDBACK
     # -----------------------------
-    if score < 0.4:
-        level = "beginner"
-    elif score < 0.7:
-        level = "intermediate"
+    if score > 0.75:
+        feedback = "Great pronunciation. Your speech is clear and natural."
+    elif score > 0.5:
+        feedback = "Good effort. Some sounds can be more precise."
     else:
-        level = "advanced"
+        feedback = "Focus on clarity and slower pronunciation."
 
-    prompt = f"""
-You are an expert pronunciation coach.
-
-User said:
-"{transcript}"
-
-Score: {score}
-
-LEVEL: {level}
-
-1. Give short feedback (max 3 sentences)
-2. Identify 1–2 pronunciation issues (phoneme-level if possible)
-3. Generate 5 practice sentences appropriate for {level}
-
-FORMAT:
-
-FEEDBACK:
-...
-
-PHONEMES:
-- issue 1
-- issue 2
-
-PRACTICE:
-1. ...
-2. ...
-3. ...
-4. ...
-5. ...
-"""
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7
-    )
-
-    content = response.choices[0].message.content
-
-    feedback = ""
-    phonemes = []
-    practice = []
-
-    try:
-        parts = content.split("PRACTICE:")
-        before = parts[0]
-        practice_block = parts[1]
-
-        feedback_part = before.split("PHONEMES:")[0]
-        phoneme_part = before.split("PHONEMES:")[1]
-
-        feedback = feedback_part.replace("FEEDBACK:", "").strip()
-
-        phonemes = [
-            line.strip("- ").strip()
-            for line in phoneme_part.split("\n")
-            if line.strip().startswith("-")
+    # -----------------------------
+    # LANGUAGE-AWARE PHONEMES
+    # -----------------------------
+    phoneme_map = {
+        "german": [
+            "Practice the 'ch' sound (as in 'ich')",
+            "Focus on umlauts: ä, ö, ü",
+            "Pay attention to 'r' pronunciation"
+        ],
+        "spanish": [
+            "Roll the 'r' sound",
+            "Work on clear vowel sounds (a, e, i, o, u)",
+            "Avoid English-style diphthongs"
+        ],
+        "french": [
+            "Practice nasal vowels (on, an, en)",
+            "Focus on silent endings",
+            "Work on the French 'r'"
+        ],
+        "russian": [
+            "Focus on hard vs soft consonants",
+            "Practice rolled 'r'",
+            "Work on vowel reduction"
+        ],
+        "english": [
+            "Work on 'th' sounds",
+            "Practice stress patterns",
+            "Focus on consonant clarity"
         ]
+    }
 
-        practice = [
-            line.split(".", 1)[1].strip()
-            for line in practice_block.split("\n")
-            if line.strip() and line[0].isdigit()
-        ]
+    # -----------------------------
+    # INFER LANGUAGE (SIMPLE HEURISTIC)
+    # -----------------------------
+    if any(word in text for word in ["ich", "nicht", "hallo"]):
+        lang = "german"
+    elif any(word in text for word in ["hola", "gracias"]):
+        lang = "spanish"
+    elif any(word in text for word in ["bonjour"]):
+        lang = "french"
+    elif any(word in text for word in ["здравствуйте"]):
+        lang = "russian"
+    else:
+        lang = "english"
 
-    except Exception:
-        feedback = content
+    phonemes = random.sample(phoneme_map[lang], 2)
+
+    # -----------------------------
+    # PRACTICE (OPTIONAL LIGHT USE)
+    # -----------------------------
+    practice = [
+        "Repeat the sentence slowly",
+        "Focus on difficult sounds",
+        "Practice with rhythm"
+    ]
 
     return feedback, phonemes, practice

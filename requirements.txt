@@ -4,3 +4,5 @@ scikit-learn
 joblib
 openai
 python-multipart
+requests
+streamlit-mic-recorder
