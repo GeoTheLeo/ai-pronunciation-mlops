@@ -360,3 +360,42 @@ def generate_practice(
     return {
         "sentences": sentences
     }
+
+# -----------------------------
+# ANALYTICS ENDPOINT
+# -----------------------------
+@app.get("/analytics")
+def analytics():
+
+    if not os.path.exists(DATA_PATH):
+
+        return {
+            "scores": []
+        }
+
+    try:
+
+        df = pd.read_csv(DATA_PATH)
+
+        if "pronunciation_score" not in df.columns:
+
+            return {
+                "scores": []
+            }
+
+        scores = (
+            df["pronunciation_score"]
+            .dropna()
+            .tolist()
+        )
+
+        return {
+            "scores": scores
+        }
+
+    except Exception as e:
+
+        return {
+            "scores": [],
+            "error": str(e)
+        }
