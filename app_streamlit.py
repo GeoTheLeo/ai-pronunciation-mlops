@@ -4,17 +4,23 @@ import tempfile
 import os
 import pandas as pd
 import numpy as np
+
 from scipy.io import wavfile
 from streamlit_mic_recorder import mic_recorder
 
 # -----------------------------
 # API CONFIG
 # -----------------------------
-API_URL = "https://ai-pronunciation-mlops.onrender.com/analyze"
+API_BASE = os.getenv(
+    "API_BASE",
+    "https://ai-pronunciation-mlops.onrender.com"
+)
 
-PRACTICE_URL = "https://ai-pronunciation-mlops.onrender.com/generate-practice"
+API_URL = f"{API_BASE}/analyze"
 
-DATA_PATH = "feature_store.csv"
+PRACTICE_URL = f"{API_BASE}/generate-practice"
+
+ANALYTICS_URL = f"{API_BASE}/analytics"
 
 # -----------------------------
 # PAGE CONFIG
@@ -25,6 +31,12 @@ st.set_page_config(
 )
 
 st.title("AI Pronunciation Coach")
+
+st.caption(
+    "Multilingual AI pronunciation training with "
+    "real-time Whisper transcription, waveform "
+    "visualization, and pronunciation analytics."
+)
 
 # -----------------------------
 # LANGUAGE SELECTION
@@ -70,19 +82,27 @@ if st.button("Generate Practice Sentences"):
 
             if "sentences" in data:
 
-                st.session_state["practice"] = data["sentences"]
+                st.session_state["practice"] = (
+                    data["sentences"]
+                )
 
             else:
 
-                st.error(f"Unexpected API response: {data}")
+                st.error(
+                    f"Unexpected API response: {data}"
+                )
 
         else:
 
-            st.error(f"API Error: {response.text}")
+            st.error(
+                f"API Error: {response.text}"
+            )
 
     except Exception as e:
 
-        st.error(f"Connection failed: {e}")
+        st.error(
+            f"Connection failed: {e}"
+        )
 
 # -----------------------------
 # AUDIO PROCESSING
@@ -102,20 +122,26 @@ def process_audio(file_bytes):
         temp_path = temp_audio.name
 
     # -----------------------------
-    # PLAYBACK
+    # AUDIO PLAYBACK
     # -----------------------------
-    st.audio(file_bytes, format="audio/wav")
+    st.audio(
+        file_bytes,
+        format="audio/wav"
+    )
 
     # -----------------------------
-    # WAVEFORM
+    # WAVEFORM VISUALIZATION
     # -----------------------------
     try:
 
         try:
 
-            rate, data = wavfile.read(temp_path)
+            rate, data = wavfile.read(
+                temp_path
+            )
 
             if len(data.shape) > 1:
+
                 data = data[:, 0]
 
             signal = data
@@ -129,14 +155,18 @@ def process_audio(file_bytes):
 
         st.subheader("Audio Waveform")
 
-        st.line_chart(signal[:2000])
+        st.line_chart(
+            signal[:2000]
+        )
 
     except Exception as e:
 
-        st.warning(f"Waveform unavailable: {e}")
+        st.warning(
+            f"Waveform unavailable: {e}"
+        )
 
     # -----------------------------
-    # SEND TO BACKEND
+    # SEND AUDIO TO BACKEND
     # -----------------------------
     try:
 
@@ -149,7 +179,9 @@ def process_audio(file_bytes):
 
         if response.status_code != 200:
 
-            st.error(f"API Error: {response.text}")
+            st.error(
+                f"API Error: {response.text}"
+            )
 
             return
 
@@ -160,13 +192,21 @@ def process_audio(file_bytes):
         # -----------------------------
         st.subheader("Transcript")
 
-        st.write(result["transcript"])
+        st.write(
+            result.get(
+                "transcript",
+                "No transcript available."
+            )
+        )
 
         col1, col2 = st.columns(2)
 
         col1.metric(
             "Score",
-            round(result["score"], 2)
+            round(
+                result.get("score", 0),
+                2
+            )
         )
 
         col2.metric(
@@ -176,23 +216,46 @@ def process_audio(file_bytes):
 
         st.subheader("Feedback")
 
-        st.write(result["feedback"])
+        st.write(
+            result.get(
+                "feedback",
+                "No feedback available."
+            )
+        )
 
         st.subheader("Phoneme Feedback")
 
-        for p in result["phonemes"]:
+        phonemes = result.get(
+            "phonemes",
+            []
+        )
 
-            st.write(f"- {p}")
+        if len(phonemes) > 0:
+
+            for p in phonemes:
+
+                st.write(f"- {p}")
+
+        else:
+
+            st.write(
+                "No phoneme feedback available."
+            )
 
     except Exception as e:
 
-        st.error(f"Processing failed: {e}")
+        st.error(
+            f"Processing failed: {e}"
+        )
 
     finally:
 
         try:
+
             os.remove(temp_path)
+
         except:
+
             pass
 
 # -----------------------------
@@ -202,7 +265,9 @@ if "practice" in st.session_state:
 
     st.divider()
 
-    st.subheader("Practice Sentences")
+    st.subheader(
+        "Practice Sentences"
+    )
 
     for i, item in enumerate(
         st.session_state["practice"]
@@ -213,28 +278,35 @@ if "practice" in st.session_state:
         )
 
         st.caption(
-            f"Pronunciation: {item['phonetic']}"
+            f"Pronunciation: "
+            f"{item['phonetic']}"
         )
 
         audio = mic_recorder(
-            start_prompt=f"Record Sentence {i+1}",
+            start_prompt=(
+                f"Record Sentence {i+1}"
+            ),
             stop_prompt="Stop Recording",
             key=f"practice_{i}"
         )
 
         if audio is not None:
 
-            process_audio(audio["bytes"])
+            process_audio(
+                audio["bytes"]
+            )
 
 # -----------------------------
 # FREE PRACTICE
 # -----------------------------
 st.divider()
 
-st.subheader("Try Your Own Sentence")
+st.subheader(
+    "Try Your Own Sentence"
+)
 
 st.caption(
-    "Speak freely to test pronunciation"
+    "Speak freely to test pronunciation."
 )
 
 audio = mic_recorder(
@@ -245,14 +317,18 @@ audio = mic_recorder(
 
 if audio is not None:
 
-    process_audio(audio["bytes"])
+    process_audio(
+        audio["bytes"]
+    )
 
 # -----------------------------
 # FILE UPLOAD
 # -----------------------------
 st.divider()
 
-st.subheader("Upload Audio Files")
+st.subheader(
+    "Upload Audio Files"
+)
 
 uploaded_files = st.file_uploader(
     "Upload .wav files",
@@ -264,9 +340,13 @@ if uploaded_files:
 
     for file in uploaded_files:
 
-        st.write(f"Processing: {file.name}")
+        st.write(
+            f"Processing: {file.name}"
+        )
 
-        process_audio(file.read())
+        process_audio(
+            file.read()
+        )
 
 # -----------------------------
 # ANALYTICS
@@ -275,26 +355,53 @@ st.divider()
 
 st.subheader("Score Trend")
 
-if os.path.exists(DATA_PATH):
+try:
 
-    df = pd.read_csv(DATA_PATH)
+    analytics_response = requests.get(
+        ANALYTICS_URL
+    )
 
-    if not df.empty:
+    if analytics_response.status_code == 200:
 
-        df = df.reset_index(drop=True)
-
-        df["step"] = df.index + 1
-
-        st.line_chart(
-            df.set_index("step")[
-                "pronunciation_score"
-            ]
+        analytics_data = (
+            analytics_response.json()
         )
+
+        scores = analytics_data.get(
+            "scores",
+            []
+        )
+
+        if len(scores) > 0:
+
+            df = pd.DataFrame({
+                "step": range(
+                    1,
+                    len(scores) + 1
+                ),
+                "score": scores
+            })
+
+            st.line_chart(
+                df.set_index("step")[
+                    "score"
+                ]
+            )
+
+        else:
+
+            st.write(
+                "No analytics data yet."
+            )
 
     else:
 
-        st.write("No data yet.")
+        st.write(
+            "Analytics unavailable."
+        )
 
-else:
+except Exception as e:
 
-    st.write("No data yet.")
+    st.write(
+        f"Analytics error: {e}"
+    )
