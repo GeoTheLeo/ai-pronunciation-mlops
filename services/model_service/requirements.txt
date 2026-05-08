@@ -1,5 +1,10 @@
 fastapi
-uvicorn[standard]
+uvicorn
 pandas
+numpy
+scipy
+scikit-learn
+joblib
 openai
 python-multipart
+requests
