@@ -1,10 +1,25 @@
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY")
+)
+
 def transcribe_audio(file_path):
-    """
-    Demo-safe transcription (no external dependency)
-    Always returns a valid transcript
-    """
+
     try:
-        # You can customize this if needed
-        return "This is a demo transcription for pronunciation analysis."
+
+        with open(file_path, "rb") as audio_file:
+
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file
+            )
+
+        return transcript.text
+
     except Exception as e:
-        return "Audio could not be transcribed."
+
+        print("Transcription failed:", e)
+
+        return "Transcription unavailable."
