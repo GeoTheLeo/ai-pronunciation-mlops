@@ -12,7 +12,7 @@ from app.transcription import transcribe_audio
 from app.llm_feedback import generate_feedback
 
 # -----------------------------
-# FASTAPI INIT
+# APP INIT
 # -----------------------------
 app = FastAPI()
 
@@ -30,15 +30,30 @@ app.add_middleware(
 # -----------------------------
 # PATHS
 # -----------------------------
-DATA_PATH = "feature_store.csv"
-MODEL_PATH = "model.pkl"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+ROOT_DIR = os.path.abspath(
+    os.path.join(BASE_DIR, "../../../")
+)
+
+DATA_PATH = os.path.join(
+    ROOT_DIR,
+    "feature_store.csv"
+)
+
+MODEL_PATH = os.path.join(
+    ROOT_DIR,
+    "model.pkl"
+)
 
 # -----------------------------
 # LOAD MODEL
 # -----------------------------
 def load_model():
+
     if os.path.exists(MODEL_PATH):
         return joblib.load(MODEL_PATH)
+
     return None
 
 model = load_model()
@@ -59,7 +74,10 @@ def extract_features(transcript, duration):
 
     num_words = len(words)
 
-    speech_rate = num_words / duration if duration > 0 else 0
+    speech_rate = (
+        num_words / duration
+        if duration > 0 else 0
+    )
 
     avg_word_length = (
         sum(len(w) for w in words) / num_words
@@ -80,17 +98,43 @@ def save_features(features):
     df = pd.DataFrame([features])
 
     if os.path.exists(DATA_PATH):
-        df.to_csv(DATA_PATH, mode="a", header=False, index=False)
+
+        df.to_csv(
+            DATA_PATH,
+            mode="a",
+            header=False,
+            index=False
+        )
+
     else:
-        df.to_csv(DATA_PATH, index=False)
+
+        df.to_csv(
+            DATA_PATH,
+            index=False
+        )
 
 # -----------------------------
-# MAIN ANALYSIS ENDPOINT
+# ROOT
+# -----------------------------
+@app.get("/")
+def root():
+
+    return {
+        "message": "AI Pronunciation Coach API Running"
+    }
+
+# -----------------------------
+# ANALYZE AUDIO
 # -----------------------------
 @app.post("/analyze")
-async def analyze_audio(audio: UploadFile = File(...)):
+async def analyze_audio(
+    audio: UploadFile = File(...)
+):
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+    with tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".wav"
+    ) as temp_audio:
 
         temp_audio.write(await audio.read())
 
@@ -101,14 +145,19 @@ async def analyze_audio(audio: UploadFile = File(...)):
         # -----------------------------
         # TRANSCRIPTION
         # -----------------------------
-        transcript = transcribe_audio(temp_path)
+        transcript = transcribe_audio(
+            temp_path
+        )
 
         # -----------------------------
-        # FEATURE EXTRACTION
+        # FEATURES
         # -----------------------------
         duration = 3.5
 
-        features = extract_features(transcript, duration)
+        features = extract_features(
+            transcript,
+            duration
+        )
 
         # -----------------------------
         # MODEL SCORING
@@ -123,30 +172,45 @@ async def analyze_audio(audio: UploadFile = File(...)):
                     features["avg_word_length"]
                 ]])[0]
 
-                score = float(max(0, min(1, score)))
+                score = float(
+                    max(0, min(1, score))
+                )
 
             except Exception as e:
 
-                print("Model prediction failed:", e)
+                print(
+                    "Prediction failed:",
+                    e
+                )
 
-                score = round(random.uniform(0.4, 0.9), 2)
+                score = round(
+                    random.uniform(0.4, 0.9),
+                    2
+                )
 
         else:
 
-            score = round(random.uniform(0.4, 0.9), 2)
+            score = round(
+                random.uniform(0.4, 0.9),
+                2
+            )
 
         # -----------------------------
-        # LLM FEEDBACK
+        # FEEDBACK
         # -----------------------------
-        feedback, phonemes, practice = generate_feedback(
-            transcript,
-            score
+        feedback, phonemes, practice = (
+            generate_feedback(
+                transcript,
+                score
+            )
         )
 
         # -----------------------------
         # SAVE ANALYTICS
         # -----------------------------
-        features["pronunciation_score"] = score
+        features[
+            "pronunciation_score"
+        ] = score
 
         save_features(features)
 
@@ -173,10 +237,12 @@ async def analyze_audio(audio: UploadFile = File(...)):
             os.remove(temp_path)
 
 # -----------------------------
-# MULTILINGUAL PRACTICE
+# PRACTICE GENERATION
 # -----------------------------
 @app.post("/generate-practice")
-def generate_practice(req: PracticeRequest):
+def generate_practice(
+    req: PracticeRequest
+):
 
     practice_bank = {
 
@@ -287,20 +353,10 @@ def generate_practice(req: PracticeRequest):
     }
 
     sentences = practice_bank.get(
-        req.target_language,
+        req.target_language.strip(),
         practice_bank["German"]
     )
 
     return {
         "sentences": sentences
-    }
-
-# -----------------------------
-# ROOT
-# -----------------------------
-@app.get("/")
-def root():
-
-    return {
-        "message": "AI Pronunciation Coach API is running"
     }
