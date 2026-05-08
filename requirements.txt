@@ -1,8 +1,12 @@
+fastapi
+uvicorn
 streamlit
+requests
 pandas
+numpy
+scipy
 scikit-learn
 joblib
 openai
 python-multipart
-requests
 streamlit-mic-recorder
