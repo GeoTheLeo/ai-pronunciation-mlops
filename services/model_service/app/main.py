@@ -1,35 +1,69 @@
-import os
-import subprocess
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import joblib
+
+import tempfile
+import os
 import pandas as pd
+import random
+import joblib
 
 from app.transcription import transcribe_audio
 from app.llm_feedback import generate_feedback
 
+# -----------------------------
+# FASTAPI INIT
+# -----------------------------
 app = FastAPI()
 
-MODEL_PATH = os.path.abspath("model.pkl")
-DATA_PATH = os.path.abspath("../../feature_store.csv")
+# -----------------------------
+# CORS
+# -----------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# -----------------------------
+# PATHS
+# -----------------------------
+DATA_PATH = "feature_store.csv"
+MODEL_PATH = "model.pkl"
 
+# -----------------------------
+# LOAD MODEL
+# -----------------------------
 def load_model():
     if os.path.exists(MODEL_PATH):
         return joblib.load(MODEL_PATH)
     return None
 
-
 model = load_model()
 
+# -----------------------------
+# REQUEST MODEL
+# -----------------------------
+class PracticeRequest(BaseModel):
+    target_language: str
+    native_language: str
 
+# -----------------------------
+# FEATURE ENGINEERING
+# -----------------------------
 def extract_features(transcript, duration):
+
     words = transcript.split()
+
     num_words = len(words)
 
     speech_rate = num_words / duration if duration > 0 else 0
+
     avg_word_length = (
-        sum(len(w) for w in words) / num_words if num_words > 0 else 0
+        sum(len(w) for w in words) / num_words
+        if num_words > 0 else 0
     )
 
     return {
@@ -38,8 +72,11 @@ def extract_features(transcript, duration):
         "avg_word_length": avg_word_length
     }
 
-
+# -----------------------------
+# SAVE FEATURES
+# -----------------------------
 def save_features(features):
+
     df = pd.DataFrame([features])
 
     if os.path.exists(DATA_PATH):
@@ -47,96 +84,223 @@ def save_features(features):
     else:
         df.to_csv(DATA_PATH, index=False)
 
-
-def should_retrain(threshold=10):
-    if not os.path.exists(DATA_PATH):
-        return False
-
-    df = pd.read_csv(DATA_PATH)
-    return len(df) % threshold == 0
-
-
+# -----------------------------
+# MAIN ANALYSIS ENDPOINT
+# -----------------------------
 @app.post("/analyze")
-async def analyze(audio: UploadFile = File(...)):
-    global model
+async def analyze_audio(audio: UploadFile = File(...)):
 
-    file_path = f"temp_{audio.filename}"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
 
-    with open(file_path, "wb") as f:
-        f.write(await audio.read())
+        temp_audio.write(await audio.read())
 
-    transcript = transcribe_audio(file_path)
-    features = extract_features(transcript, duration=3.5)
+        temp_path = temp_audio.name
 
-    if model:
-        score = model.predict([[
-            features["num_words"],
-            features["speech_rate"],
-            features["avg_word_length"]
-        ]])[0]
-        score = float(max(0, min(1, score)))
-    else:
-        import random
-        score = round(random.uniform(0.4, 0.9), 2)
+    try:
 
-    features["pronunciation_score"] = score
-    save_features(features)
+        # -----------------------------
+        # TRANSCRIPTION
+        # -----------------------------
+        transcript = transcribe_audio(temp_path)
 
-    if should_retrain():
-        subprocess.run(["python", "mlops/train/train_model.py"])
-        model = load_model()
+        # -----------------------------
+        # FEATURE EXTRACTION
+        # -----------------------------
+        duration = 3.5
 
-    feedback, phonemes, _ = generate_feedback(transcript, score)
+        features = extract_features(transcript, duration)
 
-    os.remove(file_path)
+        # -----------------------------
+        # MODEL SCORING
+        # -----------------------------
+        if model is not None:
 
-    return {
-        "transcript": transcript,
-        "score": score,
-        "feedback": feedback,
-        "phonemes": phonemes
-    }
+            try:
 
+                score = model.predict([[
+                    features["num_words"],
+                    features["speech_rate"],
+                    features["avg_word_length"]
+                ]])[0]
+
+                score = float(max(0, min(1, score)))
+
+            except Exception as e:
+
+                print("Model prediction failed:", e)
+
+                score = round(random.uniform(0.4, 0.9), 2)
+
+        else:
+
+            score = round(random.uniform(0.4, 0.9), 2)
+
+        # -----------------------------
+        # LLM FEEDBACK
+        # -----------------------------
+        feedback, phonemes, practice = generate_feedback(
+            transcript,
+            score
+        )
+
+        # -----------------------------
+        # SAVE ANALYTICS
+        # -----------------------------
+        features["pronunciation_score"] = score
+
+        save_features(features)
+
+        # -----------------------------
+        # RESPONSE
+        # -----------------------------
+        return {
+            "transcript": transcript,
+            "score": score,
+            "feedback": feedback,
+            "phonemes": phonemes,
+            "practice": practice
+        }
+
+    except Exception as e:
+
+        return {
+            "error": str(e)
+        }
+
+    finally:
+
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 # -----------------------------
-# PRACTICE GENERATION
+# MULTILINGUAL PRACTICE
 # -----------------------------
-class PracticeRequest(BaseModel):
-    target_language: str
-    native_language: str
-
-
 @app.post("/generate-practice")
 def generate_practice(req: PracticeRequest):
 
-    lang = req.target_language.lower()
+    practice_bank = {
 
-    if lang == "german":
-        sentences = [
-            {"text": "Hallo, ich lerne Deutsch.", "phonetic": "HAL-lo ikh LER-ne DOYCH"},
-            {"text": "Meine Muttersprache ist Englisch.", "phonetic": "MY-ne MUT-ter-shpra-khe ist ENG-lish"}
+        "German": [
+            {
+                "text": "Guten Morgen, wie geht es Ihnen?",
+                "phonetic": "GOO-ten MOR-gen vee GAYT ess EE-nen"
+            },
+            {
+                "text": "Ich lerne Deutsch jeden Tag.",
+                "phonetic": "ikh LEHR-neh doytch YAY-den tahk"
+            },
+            {
+                "text": "Können Sie das bitte wiederholen?",
+                "phonetic": "KUH-nen zee dahs BIT-te VEE-der-ho-len"
+            }
+        ],
+
+        "French": [
+            {
+                "text": "Bonjour, comment allez-vous ?",
+                "phonetic": "bohn-ZHOOR koh-mahn tah-lay VOO"
+            },
+            {
+                "text": "Je voudrais pratiquer le français.",
+                "phonetic": "zhuh voo-DRAY pra-tee-KAY luh frahn-SAY"
+            },
+            {
+                "text": "Pouvez-vous parler plus lentement ?",
+                "phonetic": "poo-vay VOO par-LAY ploo lahn-te-MAHN"
+            }
+        ],
+
+        "Spanish": [
+            {
+                "text": "Hola, ¿cómo estás?",
+                "phonetic": "OH-lah KOH-moh es-TAHS"
+            },
+            {
+                "text": "Estoy aprendiendo español.",
+                "phonetic": "es-TOY ah-pren-dee-EN-doh es-pan-YOL"
+            },
+            {
+                "text": "¿Puede repetir eso por favor?",
+                "phonetic": "PWEH-deh reh-peh-TEER EH-soh por fah-VOR"
+            }
+        ],
+
+        "Portuguese": [
+            {
+                "text": "Olá, tudo bem?",
+                "phonetic": "oh-LAH TOO-doo BENG"
+            },
+            {
+                "text": "Estou aprendendo português.",
+                "phonetic": "es-TOH ah-pren-DEN-do por-too-GAYS"
+            },
+            {
+                "text": "Você pode repetir isso?",
+                "phonetic": "vo-SEH PO-jee reh-peh-CHEER EE-soo"
+            }
+        ],
+
+        "Russian": [
+            {
+                "text": "Здравствуйте, как ваши дела?",
+                "phonetic": "ZDRAV-stvooy-tye kak vah-shee dye-LAH"
+            },
+            {
+                "text": "Я изучаю русский язык.",
+                "phonetic": "ya ee-zoo-CHAH-yu ROOS-kee ya-ZYK"
+            },
+            {
+                "text": "Можете повторить это?",
+                "phonetic": "MO-zhe-tye pafta-REET EH-ta"
+            }
+        ],
+
+        "Japanese": [
+            {
+                "text": "こんにちは、お元気ですか？",
+                "phonetic": "kon-nee-chee-wah oh-gen-kee dess-kah"
+            },
+            {
+                "text": "日本語を勉強しています。",
+                "phonetic": "nee-hon-go oh ben-kyoh shee-teh ee-mahs"
+            },
+            {
+                "text": "もう一度お願いします。",
+                "phonetic": "moh ee-chee-doh oh-neh-guy-shee-mahs"
+            }
+        ],
+
+        "Chinese": [
+            {
+                "text": "你好，你今天怎么样？",
+                "phonetic": "nee how nee jin tian zen me yang"
+            },
+            {
+                "text": "我正在学习中文。",
+                "phonetic": "woh jeng dzai shweh-shee jong-wen"
+            },
+            {
+                "text": "请再说一遍。",
+                "phonetic": "ching dzai shwoh ee byan"
+            }
         ]
+    }
 
-    elif lang == "japanese":
-        sentences = [
-            {"text": "こんにちは、私は日本語を勉強しています。",
-             "phonetic": "Konnichiwa, watashi wa nihongo o benkyou shiteimasu"},
-            {"text": "ゆっくり話してください。",
-             "phonetic": "Yukkuri hanashite kudasai"}
-        ]
+    sentences = practice_bank.get(
+        req.target_language,
+        practice_bank["German"]
+    )
 
-    elif lang == "chinese":
-        sentences = [
-            {"text": "你好，我在学习中文。",
-             "phonetic": "Nǐ hǎo, wǒ zài xuéxí zhōngwén"},
-            {"text": "请说慢一点。",
-             "phonetic": "Qǐng shuō màn yīdiǎn"}
-        ]
+    return {
+        "sentences": sentences
+    }
 
-    else:
-        sentences = [
-            {"text": "Hello, I am learning a language.", "phonetic": "standard pronunciation"},
-            {"text": "Please speak slowly.", "phonetic": "clear slow speech"}
-        ]
+# -----------------------------
+# ROOT
+# -----------------------------
+@app.get("/")
+def root():
 
-    return {"sentences": sentences}
+    return {
+        "message": "AI Pronunciation Coach API is running"
+    }
