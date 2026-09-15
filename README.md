@@ -1,273 +1,123 @@
-# 🎤 AI Pronunciation Coach (MLOps + GenAI)
+# AI Pronunciation Coach
 
-A full-stack, production-style multilingual pronunciation coaching system built with:
+A full-stack pronunciation coaching app that listens to you speak, transcribes it with Whisper, scores your pronunciation, and tells you specifically what to fix - not just a number, but feedback like "keep vowel timing even" or "focus on pitch consistency." It supports seven languages: German, French, Spanish, Portuguese, Russian, Japanese, and Chinese.
 
-- real-time microphone recording
-- Whisper speech transcription
-- AI-driven pronunciation feedback
-- waveform visualization
-- multilingual practice generation
-- cloud deployment
-- MLOps-style backend architecture
-- analytics and retraining pipeline concepts
+## Live Demo
 
-The system supports:
+**Frontend (Streamlit):** https://ai-pronunciation-mlops-4ejy6jjuq74jj6zecjtbnf.streamlit.app/
+**Backend API (FastAPI):** https://ai-pronunciation-mlops.onrender.com/docs
 
-- German
-- French
-- Spanish
-- Portuguese
-- Russian
-- Japanese
-- Chinese
+> Use Chrome and allow microphone access for real-time recording.
 
----
+## Application Interface
 
-## 🚀 Live Demo
-
-### Frontend (Streamlit)
-
-https://ai-pronunciation-mlops-4ejy6jjuq74jj6zecjtbnf.streamlit.app/
-
-### Backend API (FastAPI)
-
-https://ai-pronunciation-mlops.onrender.com/docs
-
-> Recommended: use Chrome and allow microphone access for real-time recording.
-
----
-
-## 🎥 Application Interface
-
-### Main Frontend
+**Main frontend** - pick a target language, generate practice sentences, record yourself, and get an instant transcript and score.
 
 ![Frontend](docs/frontend.png)
 
----
-
-### Audio Waveform Visualization
+**Waveform + feedback** - every recording gets a waveform visualization alongside transcript-aware phoneme feedback, not just a pass/fail score.
 
 ![Waveform](docs/waveform.png)
 
----
-
-### Pronunciation Analytics
+**Progress tracking** - scores are logged over time so improvement is visible across sessions, not just per-attempt.
 
 ![Analytics](docs/analytics.png)
 
----
+## Why the Whisper API, not local Whisper
 
-## 🧰 Tech Stack
+Early versions ran Whisper locally via torch. That worked fine on my machine, but it made the Docker image too large and too memory-hungry to deploy reliably on Render's free tier - builds were slow and the container kept failing to start under memory pressure. I switched to OpenAI's hosted Whisper API instead: smaller image, faster cold starts, and one less heavyweight dependency to manage. The tradeoff is a per-request API cost instead of free local inference, which is the right call for a demo app but wouldn't necessarily be for a high-volume production service.
 
-![Python](https://img.shields.io/badge/Python-3.11-blue)
-![Streamlit](https://img.shields.io/badge/Streamlit-UI-red)
-![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green)
-![MLflow](https://img.shields.io/badge/MLflow-Tracking-blue)
-![scikit-learn](https://img.shields.io/badge/Scikit--learn-Model-orange)
-![Docker](https://img.shields.io/badge/Docker-Deployment-blue)
-![Whisper](https://img.shields.io/badge/OpenAI-Whisper-black)
+## Tech Stack
 
-### Frontend
-- Streamlit
-- streamlit-mic-recorder
+**Frontend:** Streamlit, streamlit-mic-recorder
+**Backend:** FastAPI, Uvicorn, Docker, Render
+**AI/ML:** OpenAI Whisper API, scikit-learn, NumPy, SciPy, pandas
+**MLOps:** MLflow (experiment tracking, feature logging)
 
-### Backend
-- FastAPI
-- Uvicorn
-- Docker
-- Render
-
-### AI / ML
-- OpenAI Whisper API
-- scikit-learn
-- NumPy
-- SciPy
-- pandas
-
-### MLOps / Analytics
-- MLflow
-- experiment tracking
-- feature logging
-- pronunciation analytics
-- retraining pipeline
-
-### Features
-- multilingual pronunciation coaching
-- microphone recording
-- waveform visualization
-- transcript-aware phoneme feedback
-- cloud deployment
-- real-time speech transcription
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```text
 Streamlit Frontend
-        ↓
+     |
+     v
 FastAPI Backend
-        ↓
+     |
+     v
 Whisper Transcription API
-        ↓
+     |
+     v
 Pronunciation Analysis + Feedback
-        ↓
+     |
+     v
 Analytics + Feature Store
-```
 
----
 
-## ⚡ Quick Start (Local)
+## Quick Start (Local)
 
-### 1. Clone repository
-
+**1. Clone the repository**
 ```bash
 git clone https://github.com/geotheleo/ai-pronunciation-mlops.git
 cd ai-pronunciation-mlops
+
 ```
 
----
-
-### 2. Create virtual environment
-
-#### Windows
-
+**2. Create a virtual environment**
 ```bash
 python -m venv venv
 venv\Scripts\activate
 ```
+(macOS/Linux: `source venv/bin/activate`)
 
-#### macOS / Linux
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
----
-
-### 3. Install dependencies
-
+**3. Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
----
+**4. Configure environment variables**
 
-### 4. Configure environment variables
-
-Create:
-
-```text
-.env
+Create a `.env` file:
 ```
-
-Add:
-
-```env
 OPENAI_API_KEY=your_openai_api_key
 API_BASE=https://ai-pronunciation-mlops.onrender.com
 ```
 
----
-
-### 5. Run FastAPI backend
-
+**5. Run the backend and frontend**
 ```bash
 uvicorn app.main:app --reload
-```
-
----
-
-### 6. Run Streamlit frontend
-
-```bash
 streamlit run app_streamlit.py
+
 ```
 
----
+## API Endpoints
 
-## 📡 API Endpoints
+- **POST /analyze** - analyzes uploaded speech audio, returns transcript, pronunciation score, and phoneme-level feedback.
+- **POST /generate-practice** - generates multilingual practice sentences with phonetic guidance.
+- **GET /analytics** - returns stored pronunciation score history for progress visualization.
 
-### POST `/analyze`
+## Evaluation
 
-Analyzes uploaded speech audio and returns:
+Rather than abstract benchmarks, here's what an actual session looks like: a Japanese practice sentence ("Konnichiwa, ogenki desu ka?") transcribed correctly by Whisper, scored 0.74, with feedback of "Good effort. Focus on clearer articulation" and phoneme-level notes to "keep vowel timing even" and "focus on pitch consistency." Across a 9-session test run, scores ranged from 0.4 on a first attempt up to 0.9, settling in the 0.55-0.85 range as familiarity with the practice sentences increased - a believable learning curve, not a static score.
 
-- transcript
-- pronunciation score
-- phoneme feedback
-- AI coaching feedback
+Formal evaluation against a labeled pronunciation dataset (rather than self-reported session scores) is a natural next step, not yet done.
 
----
+## Deployment
 
-### POST `/generate-practice`
+- **Frontend:** Streamlit Community Cloud
+- **Backend:** Render, Dockerized FastAPI service
+- CORS-enabled API, environment-variable configuration, separated frontend/backend so each can scale or redeploy independently.
 
-Generates multilingual practice sentences with phonetic guidance.
+## Future Improvements
 
----
+- Real phoneme alignment (vs. transcript-level scoring)
+- PostgreSQL-backed feature store (currently file-based)
+- User authentication and per-user history
+- CI/CD pipeline and automated retraining jobs
+- Adaptive difficulty based on session history
 
-### GET `/analytics`
-
-Returns stored pronunciation score history for analytics visualization.
-
----
-
-## 📊 Evaluation & Results
-
-The application supports:
-
-- multilingual speech transcription
-- transcript-aware pronunciation feedback
-- waveform analysis
-- pronunciation score tracking
-- feature logging for retraining workflows
-
-Example evaluation dimensions:
-
-- transcription quality
-- pronunciation scoring consistency
-- response latency
-- multilingual coverage
-- phoneme feedback relevance
-
----
-
-## ☁️ Deployment
-
-### Frontend
-- Streamlit Community Cloud
-
-### Backend
-- Render
-- Dockerized FastAPI service
-
-### Deployment Features
-- environment-variable configuration
-- CORS-enabled API
-- cloud-hosted inference
-- separated frontend/backend architecture
-
----
-
-## 🔮 Future Improvements
-
-- real phoneme alignment
-- PostgreSQL feature store
-- user authentication
-- pronunciation history dashboards
-- CI/CD pipelines
-- automated retraining jobs
-- advanced speech embeddings
-- adaptive difficulty levels
-
----
-
-## 📄 License
+## License
 
 MIT License
 
----
-
-## 👤 Author
+## Author
 
 GeoTheLeo - Geo Smith
