@@ -58,7 +58,6 @@ Analytics + Feature Store
 ```bash
 git clone https://github.com/geotheleo/ai-pronunciation-mlops.git
 cd ai-pronunciation-mlops
-
 ```
 
 **2. Create a virtual environment**
@@ -85,7 +84,6 @@ API_BASE=https://ai-pronunciation-mlops.onrender.com
 ```bash
 uvicorn app.main:app --reload
 streamlit run app_streamlit.py
-
 ```
 
 ## API Endpoints
