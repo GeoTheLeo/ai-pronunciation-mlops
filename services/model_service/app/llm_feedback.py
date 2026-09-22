@@ -1,200 +1,77 @@
-import random
+import json
+import os
 
-def generate_feedback(transcript, score):
+from openai import OpenAI
 
-    text = transcript.lower()
+MODEL = "gpt-4o-mini"
 
-    # -----------------------------
-    # GENERAL FEEDBACK
-    # -----------------------------
-    if score > 0.75:
+_client = None
 
-        feedback = (
-            "Great pronunciation. "
-            "Your speech sounds natural."
-        )
 
-    elif score > 0.5:
+def _get_client():
+    global _client
 
-        feedback = (
-            "Good effort. "
-            "Focus on clearer articulation."
+    if _client is None:
+        _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    return _client
+
+
+SYSTEM_PROMPT = (
+    "You are a supportive multilingual pronunciation coach. Respond ONLY with a JSON "
+    "object with exactly these keys: \"feedback\" (a short, encouraging 1-3 sentence "
+    "assessment), \"phonemes\" (an array of 1-2 short, specific sound/phoneme tips), and "
+    "\"practice\" (an array of 1-2 short practice suggestions)."
+)
+
+
+def generate_feedback(transcript, target_text=None, score=None):
+
+    if target_text:
+
+        user_content = (
+            f"Target phrase: \"{target_text}\"\n"
+            f"What the speech-to-text engine heard: \"{transcript}\"\n"
+            f"Text-similarity score between target and transcript, 0 to 1 "
+            f"(1 = identical text; not a measure of accent quality): {score}\n\n"
+            "Give feedback on how closely the learner's speech matched the target "
+            "phrase, calling out likely mispronounced or missed words."
         )
 
     else:
 
-        feedback = (
-            "Try speaking more slowly "
-            "and clearly."
+        user_content = (
+            f"What the speech-to-text engine heard: \"{transcript}\"\n\n"
+            "No target phrase was given (free/open practice). Give general feedback on "
+            "the clarity and fluency suggested by this transcript."
         )
 
-    # -----------------------------
-    # TRANSCRIPT-AWARE FEEDBACK
-    # -----------------------------
-    phonemes = []
+    try:
 
-    # GERMAN
-    if any(word in text for word in [
-        "guten",
-        "deutsch",
-        "ich",
-        "bitte"
-    ]):
-
-        if "ich" in text:
-            phonemes.append(
-                "Practice the German 'ch' sound in 'ich'"
-            )
-
-        if "r" in text:
-            phonemes.append(
-                "Focus on German rolling 'r' sounds"
-            )
-
-        phonemes.append(
-            "Practice clean umlaut pronunciation"
+        response = _get_client().chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.4,
         )
 
-    # FRENCH
-    elif any(word in text for word in [
-        "bonjour",
-        "français",
-        "voudrais"
-    ]):
+        data = json.loads(response.choices[0].message.content)
 
-        phonemes.append(
-            "Practice French nasal vowels"
+        feedback = data.get("feedback", "No feedback available.")
+        phonemes = data.get("phonemes", [])
+        practice = data.get("practice", [])
+
+        return feedback, phonemes, practice
+
+    except Exception as e:
+
+        print("LLM feedback generation failed:", e)
+
+        return (
+            "AI feedback is temporarily unavailable. Please try again in a moment.",
+            [],
+            [],
         )
-
-        phonemes.append(
-            "Soften hard consonants"
-        )
-
-        phonemes.append(
-            "Focus on French rhythm and flow"
-        )
-
-    # SPANISH
-    elif any(word in text for word in [
-        "hola",
-        "español",
-        "puede"
-    ]):
-
-        phonemes.append(
-            "Practice rolling Spanish 'r' sounds"
-        )
-
-        phonemes.append(
-            "Keep vowels short and clear"
-        )
-
-        phonemes.append(
-            "Reduce English-style diphthongs"
-        )
-
-    # PORTUGUESE
-    elif any(word in text for word in [
-        "olá",
-        "português",
-        "você"
-    ]):
-
-        phonemes.append(
-            "Practice Portuguese nasal vowels"
-        )
-
-        phonemes.append(
-            "Focus on smooth consonant transitions"
-        )
-
-        phonemes.append(
-            "Work on Portuguese rhythm patterns"
-        )
-
-    # RUSSIAN
-    elif any(word in text for word in [
-        "русский",
-        "здравствуйте"
-    ]):
-
-        phonemes.append(
-            "Differentiate hard and soft consonants"
-        )
-
-        phonemes.append(
-            "Practice Russian stress placement"
-        )
-
-        phonemes.append(
-            "Strengthen rolling 'r' sounds"
-        )
-
-    # JAPANESE
-    elif any(word in text for word in [
-        "こんにちは",
-        "日本語"
-    ]):
-
-        phonemes.append(
-            "Keep vowel timing even"
-        )
-
-        phonemes.append(
-            "Use softer consonant transitions"
-        )
-
-        phonemes.append(
-            "Focus on pitch consistency"
-        )
-
-    # CHINESE
-    elif any(word in text for word in [
-        "你好",
-        "中文"
-    ]):
-
-        phonemes.append(
-            "Practice tonal consistency"
-        )
-
-        phonemes.append(
-            "Focus on syllable timing"
-        )
-
-        phonemes.append(
-            "Avoid clipped consonant endings"
-        )
-
-    # FALLBACK
-    else:
-
-        phonemes.append(
-            "Focus on pronunciation clarity"
-        )
-
-        phonemes.append(
-            "Practice smoother speech rhythm"
-        )
-
-        phonemes.append(
-            "Slow down difficult sounds"
-        )
-
-    # -----------------------------
-    # PRACTICE TIPS
-    # -----------------------------
-    practice = [
-        "Repeat difficult phrases slowly",
-        "Practice consistently",
-        "Focus on rhythm and articulation"
-    ]
-
-    return (
-        feedback,
-        random.sample(
-            phonemes,
-            min(2, len(phonemes))
-        ),
-        practice
-    )

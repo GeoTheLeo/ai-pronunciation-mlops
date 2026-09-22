@@ -107,7 +107,7 @@ if st.button("Generate Practice Sentences"):
 # -----------------------------
 # AUDIO PROCESSING
 # -----------------------------
-def process_audio(file_bytes):
+def process_audio(file_bytes, target_text=None):
 
     # -----------------------------
     # SAVE TEMP AUDIO
@@ -174,7 +174,8 @@ def process_audio(file_bytes):
 
             response = requests.post(
                 API_URL,
-                files={"audio": f}
+                files={"audio": f},
+                data={"target_text": target_text} if target_text else None,
             )
 
         if response.status_code != 200:
@@ -201,12 +202,11 @@ def process_audio(file_bytes):
 
         col1, col2 = st.columns(2)
 
+        raw_score = result.get("score")
+
         col1.metric(
             "Score",
-            round(
-                result.get("score", 0),
-                2
-            )
+            round(raw_score, 2) if raw_score is not None else "N/A"
         )
 
         col2.metric(
@@ -293,7 +293,8 @@ if "practice" in st.session_state:
         if audio is not None:
 
             process_audio(
-                audio["bytes"]
+                audio["bytes"],
+                target_text=item["text"]
             )
 
 # -----------------------------

@@ -11,8 +11,14 @@ __pycache__/
 # VIRTUAL ENVIRONMENTS
 # -----------------------------
 venv/
+
+# -----------------------------
+# SECRETS
+# -----------------------------
+.env
 .env/
 .env.*
+!.env.example
 
 # -----------------------------
 # LARGE ML / MODEL FILES

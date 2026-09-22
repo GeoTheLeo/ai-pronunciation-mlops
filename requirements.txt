@@ -8,5 +8,6 @@ scipy
 scikit-learn
 joblib
 openai
+python-dotenv
 python-multipart
 streamlit-mic-recorder

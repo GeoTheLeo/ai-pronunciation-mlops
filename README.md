@@ -4,12 +4,12 @@ A full-stack, production-style multilingual pronunciation coaching system built 
 
 - real-time microphone recording
 - Whisper speech transcription
-- AI-driven pronunciation feedback
+- text-similarity pronunciation scoring against target phrases
+- AI-generated pronunciation feedback (OpenAI, grounded in the transcript/target/score)
 - waveform visualization
 - multilingual practice generation
 - cloud deployment
-- MLOps-style backend architecture
-- analytics and retraining pipeline concepts
+- analytics and feature logging
 
 The system supports:
 
@@ -62,8 +62,7 @@ https://ai-pronunciation-mlops.onrender.com/docs
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Streamlit](https://img.shields.io/badge/Streamlit-UI-red)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green)
-![MLflow](https://img.shields.io/badge/MLflow-Tracking-blue)
-![scikit-learn](https://img.shields.io/badge/Scikit--learn-Model-orange)
+![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o--mini-black)
 ![Docker](https://img.shields.io/badge/Docker-Deployment-blue)
 ![Whisper](https://img.shields.io/badge/OpenAI-Whisper-black)
 
@@ -78,18 +77,16 @@ https://ai-pronunciation-mlops.onrender.com/docs
 - Render
 
 ### AI / ML
-- OpenAI Whisper API
-- scikit-learn
+- OpenAI Whisper API (transcription)
+- OpenAI GPT-4o-mini (pronunciation feedback generation)
 - NumPy
 - SciPy
 - pandas
 
-### MLOps / Analytics
-- MLflow
-- experiment tracking
+### Analytics
+- text-similarity pronunciation scoring
 - feature logging
-- pronunciation analytics
-- retraining pipeline
+- pronunciation score trend analytics
 
 ### Features
 - multilingual pronunciation coaching
@@ -191,12 +188,14 @@ streamlit run app_streamlit.py
 
 ### POST `/analyze`
 
-Analyzes uploaded speech audio and returns:
+Analyzes uploaded speech audio (with an optional `target_text` form field for guided
+practice sentences) and returns:
 
-- transcript
-- pronunciation score
-- phoneme feedback
-- AI coaching feedback
+- transcript (OpenAI Whisper)
+- pronunciation score — text-similarity between the transcript and `target_text`, `null`
+  when no target is given (free/open practice, where there's nothing to score against)
+- phoneme-level tips (AI-generated)
+- AI coaching feedback (OpenAI GPT-4o-mini, grounded in the transcript, target phrase, and score)
 
 ---
 
@@ -251,7 +250,8 @@ Example evaluation dimensions:
 
 ## 🔮 Future Improvements
 
-- real phoneme alignment
+- real phoneme alignment (acoustic model, beyond text-similarity)
+- MLflow experiment tracking
 - PostgreSQL feature store
 - user authentication
 - pronunciation history dashboards

@@ -1,15 +1,17 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
 import tempfile
 import os
 import pandas as pd
-import random
-import joblib
 
 from app.transcription import transcribe_audio
 from app.llm_feedback import generate_feedback
+from app.scoring import get_audio_duration, compute_similarity_score
+
+load_dotenv()
 
 # -----------------------------
 # APP INIT
@@ -41,23 +43,6 @@ DATA_PATH = os.path.join(
     "feature_store.csv"
 )
 
-MODEL_PATH = os.path.join(
-    ROOT_DIR,
-    "model.pkl"
-)
-
-# -----------------------------
-# LOAD MODEL
-# -----------------------------
-def load_model():
-
-    if os.path.exists(MODEL_PATH):
-        return joblib.load(MODEL_PATH)
-
-    return None
-
-model = load_model()
-
 # -----------------------------
 # REQUEST MODEL
 # -----------------------------
@@ -87,7 +72,8 @@ def extract_features(transcript, duration):
     return {
         "num_words": num_words,
         "speech_rate": speech_rate,
-        "avg_word_length": avg_word_length
+        "avg_word_length": avg_word_length,
+        "duration_seconds": duration,
     }
 
 # -----------------------------
@@ -128,7 +114,8 @@ def root():
 # -----------------------------
 @app.post("/analyze")
 async def analyze_audio(
-    audio: UploadFile = File(...)
+    audio: UploadFile = File(...),
+    target_text: str = Form(None),
 ):
 
     with tempfile.NamedTemporaryFile(
@@ -150,69 +137,45 @@ async def analyze_audio(
         )
 
         # -----------------------------
-        # FEATURES
+        # REAL AUDIO DURATION
         # -----------------------------
-        duration = 3.5
+        duration = get_audio_duration(temp_path)
 
+        # -----------------------------
+        # FEATURES (logged for analytics)
+        # -----------------------------
         features = extract_features(
             transcript,
             duration
         )
 
         # -----------------------------
-        # MODEL SCORING
+        # SCORING: text-similarity against the target phrase.
+        # None when there's no target (free/open practice) - there's nothing to
+        # score pronunciation accuracy against in that case.
         # -----------------------------
-        if model is not None:
-
-            try:
-
-                score = model.predict([[
-                    features["num_words"],
-                    features["speech_rate"],
-                    features["avg_word_length"]
-                ]])[0]
-
-                score = float(
-                    max(0, min(1, score))
-                )
-
-            except Exception as e:
-
-                print(
-                    "Prediction failed:",
-                    e
-                )
-
-                score = round(
-                    random.uniform(0.4, 0.9),
-                    2
-                )
-
-        else:
-
-            score = round(
-                random.uniform(0.4, 0.9),
-                2
-            )
-
-        # -----------------------------
-        # FEEDBACK
-        # -----------------------------
-        feedback, phonemes, practice = (
-            generate_feedback(
-                transcript,
-                score
-            )
+        score = compute_similarity_score(
+            transcript,
+            target_text
         )
 
         # -----------------------------
-        # SAVE ANALYTICS
+        # AI FEEDBACK (real LLM call, grounded in the transcript/target/score)
         # -----------------------------
-        features[
-            "pronunciation_score"
-        ] = score
+        feedback, phonemes, practice = generate_feedback(
+            transcript,
+            target_text=target_text,
+            score=score,
+        )
 
-        save_features(features)
+        # -----------------------------
+        # SAVE ANALYTICS (only when we have a real score to trend)
+        # -----------------------------
+        if score is not None:
+
+            features["pronunciation_score"] = score
+
+            save_features(features)
 
         # -----------------------------
         # RESPONSE
